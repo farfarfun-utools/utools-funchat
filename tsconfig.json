@@ -9,7 +9,7 @@
     "isolatedModules": true,
     "esModuleInterop": true,
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "types": ["node", "vite/client", "vitest/globals"],
+    "types": ["node", "vite/client", "vitest/globals", "utools-api-types"],
     "skipLibCheck": true,
     "noEmit": true,
     "strict": true

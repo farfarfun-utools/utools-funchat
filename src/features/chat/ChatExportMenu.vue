@@ -104,8 +104,11 @@ function closeFromOutside(event: Event) {
 
 // 这些浮层不是原生 dialog，Esc 不会自动关，得自己接。
 // 有模态弹窗开着时让它自己处理 Esc，别越过它去关菜单。
+// 真的关掉了就 preventDefault：Esc 在 App 那层是「退出插件」，一次按键只该剥掉一层。
 function closeOnEscape(event: KeyboardEvent) {
-  if (event.key === 'Escape' && !document.querySelector('dialog[open]')) closeMenu();
+  if (event.key !== 'Escape' || !open.value || document.querySelector('dialog[open]')) return;
+  event.preventDefault();
+  closeMenu();
 }
 
 onMounted(() => {

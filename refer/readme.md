@@ -1,9 +1,16 @@
-ChatGPT.好友 是一款utools插件，和本项目一样，但其界面设计的比较好看，请将本项目优化一下界面，像 该插件一样
-1. tab在左边，而且可以在一个界面直接切换agent聊天
-2. 可以直接查看每个agent的聊天记录，便于回溯
-3. 还要支持两种色系切换
-4. 建议整个页面布局完全复刻该插件
-5. 头像系统也支持下吧
-https://www.u-tools.cn/plugins/detail/ChatGPT.好友/
+# refer/
 
-本文件夹内的upxs是其插件代码
+参考资料目录，不参与构建，也不打进插件。
+
+funchat 的界面与交互参考了 uTools 插件应用
+[ChatGPT.好友](https://www.u-tools.cn/plugins/detail/ChatGPT.%E5%A5%BD%E5%8F%8B/)：
+
+- 侧栏在左，好友列表与聊天同屏，切好友不跳页
+- 每个好友的历史话题独立存档，便于回溯
+- 浅色 / 深色双色系
+- 头像系统
+
+调试时如果把它的 `.upxs` 放在这个目录下对照，不会被提交——`.gitignore` 里有
+`refer/*.upxs`。该文件属于原作者，请勿分发，也不要把其中的代码复制进本仓库。
+
+致谢见根目录 [README](../README.md#致谢)。

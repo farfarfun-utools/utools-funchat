@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue';
+import { modelInfo } from '../../services/models.js';
 
 type PickerMode = 'single' | 'multiple';
 type OpenOptions = { mode?: PickerMode; title?: string; hint?: string };
@@ -16,11 +17,16 @@ let confirmed = false;
 
 // 列表可能有几百项，逐项 includes 会退化成 O(n²)，用 Set 做命中判断
 const checkedSet = computed(() => new Set(checked.value));
+// uTools AI 会连显示名、识图能力和单次调用的能量消耗一起给出来，列表里不该只有裸 id。
+// 私有 API 线路查不到这些，info 就是 undefined，退回只显示 id。
+const decorated = computed(() => all.value.map((id) => ({ id, info: modelInfo(id) })));
 const matches = computed(() => {
   const value = keyword.value.trim().toLowerCase();
-  return value ? all.value.filter((model) => model.toLowerCase().includes(value)) : all.value;
+  if (!value) return decorated.value;
+  // 显示名也参与搜索：记得「豆包」的人未必记得 doubao-seed-1-6
+  return decorated.value.filter(({ id, info }) => id.toLowerCase().includes(value) || info?.label?.toLowerCase().includes(value));
 });
-const allMatchesChecked = computed(() => matches.value.length > 0 && matches.value.every((model) => checkedSet.value.has(model)));
+const allMatchesChecked = computed(() => matches.value.length > 0 && matches.value.every(({ id }) => checkedSet.value.has(id)));
 
 /**
  * 打开模型选择弹窗。
@@ -57,12 +63,13 @@ function choose(model: string) {
 
 // 只对当前筛选结果生效：搜 "gpt" 再点全选，不该把列表外的模型一起带上
 function toggleMatches() {
+  const ids = matches.value.map(({ id }) => id);
   if (allMatchesChecked.value) {
-    const drop = new Set(matches.value);
+    const drop = new Set(ids);
     checked.value = checked.value.filter((model) => !drop.has(model));
     return;
   }
-  checked.value = [...new Set([...checked.value, ...matches.value])];
+  checked.value = [...new Set([...checked.value, ...ids])];
 }
 
 function confirm() {
@@ -104,18 +111,23 @@ defineExpose({ open });
 
     <div class="picker-list" :class="{ single: mode === 'single' }" role="listbox">
       <button
-        v-for="model in matches"
-        :key="model"
+        v-for="{ id, info } in matches"
+        :key="id"
         type="button"
         class="picker-item"
         role="option"
-        :aria-selected="checkedSet.has(model)"
-        :class="{ on: checkedSet.has(model) }"
-        @click="choose(model)"
+        :aria-selected="checkedSet.has(id)"
+        :class="{ on: checkedSet.has(id) }"
+        @click="choose(id)"
       >
-        <input v-if="mode === 'multiple'" type="checkbox" tabindex="-1" :checked="checkedSet.has(model)" @click.stop="choose(model)">
+        <input v-if="mode === 'multiple'" type="checkbox" tabindex="-1" :checked="checkedSet.has(id)" @click.stop="choose(id)">
         <i v-else class="iconfont icon-success picker-tick" aria-hidden="true"></i>
-        <span>{{ model }}</span>
+        <!-- 图标拉不下来就隐掉，不要留一个破图框 -->
+        <img v-if="info?.icon" class="picker-icon" :src="info.icon" alt="" @error="($event.target as HTMLImageElement).hidden = true">
+        <span class="picker-id">{{ id }}</span>
+        <span v-if="info?.label && info.label !== id" class="picker-label">{{ info.label }}</span>
+        <span v-if="info?.vision" class="picker-tag" title="支持图片输入">识图</span>
+        <span v-if="info?.cost" class="picker-cost" :title="`单次调用消耗 ${info.cost} AI 能量`">{{ info.cost }} 能量</span>
       </button>
       <p v-if="!matches.length" class="picker-empty">
         <template v-if="all.length">没有匹配「{{ keyword }}」的模型</template>
@@ -166,6 +178,14 @@ defineExpose({ open });
 .picker-item.on .picker-tick { visibility: visible; }
 /* 模型 id 常有很长的同前缀串，等宽字体更容易比对，过长截断而不是换行 */
 .picker-item span { min-width: 0; overflow: hidden; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.picker-icon { width: 16px; height: 16px; flex: 0 0 16px; border-radius: 4px; object-fit: contain; }
+/* id 先被挤：右边的显示名和标签都是定宽的短内容，截断 id 比截断它们更不丢信息 */
+.picker-id { flex: 0 1 auto; }
+/* 显示名用正文字体，和等宽的 id 一眼分得开 */
+.picker-label { flex: 0 0 auto; color: var(--color-text-3); font-family: inherit !important; font-size: 12px !important; }
+.picker-tag, .picker-cost { flex: 0 0 auto; padding: 0 6px; border-radius: 8px; font-family: inherit !important; font-size: 11px !important; line-height: 17px; }
+.picker-tag { color: var(--color-primary); background: var(--color-primary-light-1); }
+.picker-cost { margin-left: auto; color: var(--color-text-3); background: var(--color-fill-2); font-variant-numeric: tabular-nums; }
 .picker-empty { padding: 32px 8px; color: var(--color-text-3); font-size: 12px; line-height: 1.6; text-align: center; }
 .model-picker footer { padding: 12px 20px 16px; display: flex; flex: 0 0 auto; align-items: center; gap: 8px; border-top: 1px solid var(--color-border-2); }
 .picker-count { margin-right: auto; color: var(--color-text-3); font-size: 12px; }

@@ -124,6 +124,26 @@ test('uses the current agent model before the global fallback', async () => {
   }
 });
 
+test('sends only the fields uTools AI accepts', async () => {
+  const originalAi = host.ai;
+  let received;
+  host.ai = async (params) => { received = params; };
+  try {
+    await streamChat({
+      settings: { provider: 'utools' },
+      agent: { params: { model: 'm', temperature: 0.2, top_p: 0.9, max_tokens: 100, presence_penalty: 1 }, un_stream: true },
+      messages: [{ role: 'user', content: '你好' }],
+      onDelta() {},
+    });
+    // AiOptions 只有 model / messages / tools。多发的字段不会报错，只会被静默丢掉——
+    // 那比发不出去更糟：界面上调好的 temperature 看着生效了，其实一直是模型默认值。
+    // 这条线路的参数限制由界面讲清楚，不在这里假装传过去了。
+    assert.deepEqual(Object.keys(received).sort(), ['messages', 'model']);
+  } finally {
+    host.ai = originalAi;
+  }
+});
+
 test('aborts an in-flight uTools AI request when the signal fires', async () => {
   const originalAi = host.ai;
   let aborted = false;

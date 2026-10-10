@@ -7,17 +7,32 @@
   "preload": "preload.js",
   "logo": "logo.png",
   "pluginSetting": {
-    "single": true
+    "single": true,
+    "height": 660
   },
   "features": [
     {
       "code": "funchat",
       "explain": "打开 funchat",
+      "description": "打开 funchat",
       "icon": "logo.png",
       "cmds": [
         "funchat",
         "Funchat",
         "聊天助手"
+      ]
+    },
+    {
+      "code": "funchat-over",
+      "explain": "把选中的文字丢给 AI 好友",
+      "description": "把选中的文字丢给 AI 好友",
+      "icon": "logo.png",
+      "cmds": [
+        {
+          "type": "over",
+          "label": "问 AI 好友",
+          "maxLength": 4000
+        }
       ]
     }
   ],

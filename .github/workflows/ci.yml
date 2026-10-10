@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # corepack 按 package.json#packageManager 取 pnpm 版本，和 build.sh 的下限检查是同一套
+      - name: Enable corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # 这一条就是本地的那道门：install --frozen-lockfile → test → typecheck →
+      # lint:check → preload.js 语法 → plugin.json 可解析 → build → 产物齐全。
+      # 单独再列一遍脚本只会和 build.sh 慢慢不一致，所以直接跑它。
+      - name: Build gates
+        run: sh build.sh

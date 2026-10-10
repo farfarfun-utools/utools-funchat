@@ -139,6 +139,16 @@ async function chooseModel() {
 
 type ParamRow = { key: keyof typeof params; label: string; min: number; max: number; step: number };
 
+// uTools AI 只接受 model / messages / tools，采样参数一概丢弃（见 services/chat.ts 的说明）。
+// 「上下文数」是本地裁剪消息列表用的，两条线路都算数，所以不在这张名单里。
+const INERT_ON_UTOOLS = new Set(['max_tokens', 'temperature', 'top_p', 'frequency_penalty', 'presence_penalty']);
+const viaUtools = computed(() => store.state.settings.provider === 'utools');
+
+/** 这一项在当前线路上是不是发不出去。禁用而不是让用户空拖一遍滑块。 */
+function inert(row: ParamRow): boolean {
+  return viaUtools.value && INERT_ON_UTOOLS.has(row.key);
+}
+
 const parameterRows: ParamRow[] = [
   { key: 'contextLength', label: '上下文数', min: 2, max: 36, step: 1 },
   { key: 'max_tokens', label: '最大回复', min: 0, max: 16384, step: 1 },
@@ -250,7 +260,12 @@ function rangeStyle(row: ParamRow) {
   </section>
 
   <section v-else class="chat-popover params-popover" role="dialog" aria-label="临时调参">
-    <header><b>临时调参</b><small>发起新话题后失效</small><span>ⓘ 永久保存模型方法</span></header>
+    <header>
+      <b>临时调参</b><small>发起新话题后失效</small>
+      <!-- 当前线路发不出采样参数时，先把这件事讲清楚，比提示去哪儿永久保存更要紧 -->
+      <span v-if="viaUtools" class="route-caveat">ⓘ uTools AI 不接受采样参数</span>
+      <span v-else>ⓘ 永久保存模型方法</span>
+    </header>
     <label class="model-row">
       <b>模型选择</b>
       <span class="model-control">
@@ -263,7 +278,7 @@ function rangeStyle(row: ParamRow) {
         <small>手填也可以，注意区分大小写。</small>
       </span>
     </label>
-    <label v-for="row in parameterRows" :key="row.key" class="parameter-row"><span>{{ row.label }} <small>ⓘ</small></span><input v-model.number="params[row.key]" type="range" :min="row.min" :max="row.max" :step="row.step" :style="rangeStyle(row)" @input="saveParams"><input v-model.number="params[row.key]" class="parameter-number" type="number" :min="row.min" :max="row.max" :step="row.step" @change="saveParams"></label>
+    <label v-for="row in parameterRows" :key="row.key" class="parameter-row" :class="{ inert: inert(row) }" :title="inert(row) ? '这项发不到 uTools AI，换到私有API路线才生效' : ''"><span>{{ row.label }} <small>ⓘ</small></span><input v-model.number="params[row.key]" type="range" :min="row.min" :max="row.max" :step="row.step" :style="rangeStyle(row)" :disabled="inert(row)" @input="saveParams"><input v-model.number="params[row.key]" class="parameter-number" type="number" :min="row.min" :max="row.max" :step="row.step" :disabled="inert(row)" @change="saveParams"></label>
 
   </section>
 
@@ -336,6 +351,7 @@ function rangeStyle(row: ParamRow) {
 .params-popover header b { color: var(--color-text-1); font-weight: 500; }
 .params-popover header small { margin-left: 8px; color: #f759ab; font-size: 12px; }
 .params-popover header span { margin-left: auto; color: var(--color-text-3); font-size: 12px; }
+.params-popover header .route-caveat { color: #f759ab; }
 .model-row { margin-bottom: 10px; display: flex; align-items: flex-start; }
 .model-row > b { width: 90px; padding-top: 7px; font-weight: 400; text-align: right; }
 .model-control { position: relative; min-width: 0; margin-left: 18px; flex: 1; }
@@ -347,6 +363,8 @@ function rangeStyle(row: ParamRow) {
 .model-browse .iconfont { font-size: 14px; }
 .model-control > small { display: block; margin-top: 6px; color: var(--color-text-3); font-size: 12px; }
 .parameter-row { height: 44px; display: flex; align-items: center; }
+/* 当前线路发不出去的参数：淡掉并禁用，让「调了没反应」变成「看得出调不了」 */
+.parameter-row.inert { opacity: .45; cursor: not-allowed; }
 .parameter-row > span { width: 90px; flex: 0 0 90px; color: var(--color-text-1); }
 .parameter-row > span small { color: #b7bdc7; font-size: 11px; }
 .parameter-row input[type="range"] { min-width: 0; height: 18px; margin: 0 20px 0 0; flex: 1; appearance: none; background: transparent; }

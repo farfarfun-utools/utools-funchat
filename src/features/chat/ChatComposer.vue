@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useChatStore } from '../../stores/chat.js';
+import { supportsVision } from '../../services/models.js';
 import ChatPopover from './ChatPopover.vue';
 import { MAX_ATTACHMENTS, imagesFromTransfer, readImageAttachment, transferHasFiles } from './attachments.js';
 import type { ImageAttachment } from './attachments.ts';
@@ -25,6 +26,9 @@ const needsApiSetup = computed(() => store.state.settings.provider !== 'utools' 
 const displayedTokens = computed(() => needsApiSetup.value
   ? 0
   : store.tokenCount.value + estimateTokens(text.value) + attachments.value.length * IMAGE_TOKEN_ESTIMATE);
+// uTools AI 的模型清单会标明每个模型吃不吃图片。确定不支持时才提醒——拿不到清单
+// （私有 API 线路）一律当作支持，不能凭猜测拦住用户的图片。
+const noVision = computed(() => !supportsVision(store.activeModel.value));
 
 function warn(message: string) {
   notice.value = message;
@@ -35,6 +39,8 @@ function warn(message: string) {
 // 读图和压缩都要时间，先占一个位显示转圈，成功后原地替换成缩略图。
 // 期间用户可能继续粘贴，所以每一步都基于当前列表重新算，不缓存快照。
 async function addImages(files: File[]) {
+  // 不拦，只提醒：模型清单可能滞后于实际能力，而且用户也许正打算顺手换个模型再发。
+  if (noVision.value) warn(`${store.activeModel.value} 不识图，发之前先换个支持识图的模型`);
   const room = MAX_ATTACHMENTS - attachments.value.length;
   if (files.length > room) warn(`一条消息最多带 ${MAX_ATTACHMENTS} 张图片`);
   for (const file of files.slice(0, Math.max(room, 0))) {
@@ -131,15 +137,34 @@ function closeFromOutside(event: Event) {
 
 // API 浮层和几个下拉菜单都不是原生 dialog，Esc 不会自动关，得自己接。
 // 但浮层里可能又开着模型选择弹窗，这一下 Esc 该只关那个弹窗，不能把浮层一起收掉。
+// 关掉浮层就算消费掉这次 Esc：App 那层的 Esc 是「退出插件」，一次按键只剥一层
 function closeOnEscape(event: KeyboardEvent) {
   if (event.key !== 'Escape' || !popup.value) return;
   if (document.querySelector('dialog[open]')) return;
+  event.preventDefault();
   popup.value = '';
+}
+
+// 每次进入插件都把焦点放回输入框。uTools 里「唤出 → 敲 funchat → 回车」之后插件就该能直接
+// 打字，以前中间还要补一次点击；而且退到后台再回来时焦点是丢了的。
+// 带着选中文字进来（plugin.json 的 over 指令）就预填进去，但不覆盖用户已经写了的草稿。
+function applyEnterIntent(prefill: string) {
+  if (prefill && !text.value.trim()) text.value = prefill;
+  // 等 DOM 更新完再 focus，预填的文字这时才真的在 textarea 里，光标才能停到末尾
+  void nextTick(() => {
+    const element = textarea.value;
+    if (!element) return;
+    element.focus();
+    // 光标停在末尾，方便接着补充要求
+    element.setSelectionRange(text.value.length, text.value.length);
+  });
 }
 
 onMounted(() => {
   document.addEventListener('pointerdown', closeFromOutside);
   document.addEventListener('keydown', closeOnEscape);
+  applyEnterIntent(store.enterIntent.value.text);
+  watch(() => store.enterIntent.value.seq, () => { applyEnterIntent(store.enterIntent.value.text); });
 });
 onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', closeFromOutside);
@@ -191,7 +216,7 @@ onBeforeUnmount(() => {
           <i class="iconfont icon-close" aria-hidden="true"></i>
         </button>
       </div>
-      <span class="attachment-hint">图片需所选模型支持识图</span>
+      <span class="attachment-hint" :class="{ blocked: noVision }">{{ noVision ? `${store.activeModel.value} 不支持识图` : '图片需所选模型支持识图' }}</span>
     </div>
     <div class="textarea-wrap" @click="textarea?.focus()"><textarea ref="textarea" v-model="text" placeholder="聊点什么吧...（可直接粘贴图片）" spellcheck="false" @keydown="keydown" @paste="paste"></textarea></div>
     <div class="composer-footer">
@@ -223,6 +248,7 @@ onBeforeUnmount(() => {
 @keyframes attachment-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .attachment-spinner { animation-duration: 2.4s; } }
 .attachment-hint { color: var(--color-text-3); font-size: 11px; white-space: nowrap; }
+.attachment-hint.blocked { color: #f53f3f; }
 .composer-notice { padding-top: 10px; color: #f53f3f; font-size: 12px; line-height: 1.15; }
 .composer-tools { height: 42px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; }
 .tool-group { display: flex; align-items: center; gap: 25px; }

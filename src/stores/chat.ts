@@ -2,6 +2,7 @@ import { computed, reactive, ref, watch } from 'vue';
 import { streamChat } from '../services/chat.ts';
 import { host } from '../services/utools.ts';
 import { clonePlain } from '../services/plain-clone.ts';
+import { loadUtoolsModelInfo } from '../services/models.ts';
 import {
   loadAgents,
   loadHistories,
@@ -139,9 +140,52 @@ function applyTheme(): void {
 }
 
 // 插件在 uTools 主面板里的高度由宿主控制，对应设置里的「插件高度」。
-// 以前没人调这个接口，那项设置其实一直是空转的。分离成独立窗口后 uTools 会忽略它。
+// 分离成独立窗口后 uTools 会忽略它。
+// 两个名字都试一次：8.0 的接口叫 setExpandHeight，更早的客户端上只有拼错的 setExpendHeight。
+// 之前只调旧名字，在 8.0 上是可选调用静默失败——这项设置拖了没反应也不报错。
 function applyPluginHeight(): void {
-  host.setExpendHeight?.(Number(state.settings.windowHeight) || 660);
+  const height = Number(state.settings.windowHeight) || 660;
+  (host.setExpandHeight ?? host.setExpendHeight)?.(height);
+}
+
+// 进入插件时的输入意图。seq 每次进入都 +1，输入框靠它聚焦；text 是匹配命令带进来的
+// 选中文字（plugin.json 里的 over 类型指令），没有就是空串。
+// 预填而不直接发送：用户还得有机会挑好友、改措辞。
+const enterIntent = ref({ seq: 0, text: '' });
+
+// 只有 over（划词）带进来的 payload 才是用户想问的内容。敲关键字进来时 type 是 text、
+// payload 是关键字本身（"funchat"），照着预填会往输入框里塞一句莫名的 "funchat"。
+function intentTextOf(action: { type?: string; payload?: unknown } | undefined): string {
+  if (action?.type !== 'over') return '';
+  return typeof action.payload === 'string' ? action.payload : '';
+}
+
+// 同步拉到新文档后重读一遍。正在生成回复时直接跳过，否则会把流式写入的那条消息覆盖掉；
+// 当前好友和正在看的话题要保住，不然用户会被莫名甩回第一个好友。
+async function refreshFromSync(): Promise<void> {
+  if (state.loading) return;
+  const currentId = state.currentAgent?._id;
+  const chatId = state.currentAgent?.chatId;
+  state.agents = await loadAgents();
+  state.histories = await loadHistories();
+  sortAgents();
+  const current = state.agents.find((agent) => agent._id === currentId);
+  if (current && chatId) current.chatId = chatId;
+  state.currentAgent = current || state.agents[0] || null;
+}
+
+function registerHostEvents(): void {
+  // 以前一次都没注册过 onPluginEnter，于是「唤出 uTools → 敲 funchat → 回车 → 直接打字」
+  // 中间凭空多了一次点击输入框；匹配命令（选中文字直接提问）更是无从实现。
+  host.onPluginEnter?.((action) => {
+    enterIntent.value = { seq: enterIntent.value.seq + 1, text: intentTextOf(action) };
+  });
+  // uTools 退出插件默认是「转后台」（isKill=false），不会触发 pagehide，
+  // 流式回复途中退出整轮问答就丢了。和 App.vue 里的 pagehide 两头都挂上。
+  host.onPluginOut?.(() => { persistCurrentConversation(); });
+  // uTools 会在设备间同步插件文档。不监听的话，另一台机器上加的好友和话题在这里要重启插件
+  // 才看得见，而且接着写同一份文档会直接撞 _rev 冲突。
+  host.onDbPull?.(() => { void refreshFromSync(); });
 }
 
 function ownActivityAt(agent: Agent): number {
@@ -178,6 +222,11 @@ async function init(): Promise<void> {
   applyTheme();
   applyPluginHeight();
   systemTheme?.addEventListener?.('change', applyTheme);
+  // 不 await：模型元信息只用来把选择器里的裸 id 换成显示名、标出能量消耗、以及判断
+  // 模型吃不吃图片。拉不到也不影响聊天，不该让它挡住首屏。
+  void loadUtoolsModelInfo();
+  // 官方文档：每个插件应用只需注册一次事件监听。init 只在 App 挂载时调用一次。
+  registerHostEvents();
   state.ready = true;
 }
 
@@ -514,6 +563,7 @@ export function useChatStore() {
     agentHistories,
     routeModels,
     activeModel,
+    enterIntent,
     paramOverrides,
     setParamOverrides,
     init,

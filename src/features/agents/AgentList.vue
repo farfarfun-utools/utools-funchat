@@ -63,8 +63,11 @@ function deleteFromMenu() {
   if (agent) deleteSelectedAgent(agent);
 }
 
+// 关掉右键菜单就算消费掉这次 Esc：App 那层的 Esc 是「退出插件」，一次按键只剥一层
 function closeOnEscape(event: KeyboardEvent) {
-  if (event.key === 'Escape') contextMenu.open = false;
+  if (event.key !== 'Escape' || !contextMenu.open) return;
+  event.preventDefault();
+  contextMenu.open = false;
 }
 
 onMounted(() => {

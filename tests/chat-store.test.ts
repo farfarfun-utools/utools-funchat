@@ -265,17 +265,46 @@ test('autoPrefix is prepended to the outgoing question only', async () => {
   assert.equal((await loadHistories())[0].messages.at(-2).content, '你好');
 });
 
-test('un_stream turns off streaming in the request', async () => {
+test('un_stream decides whether uTools AI gets a stream callback', async () => {
   await setup();
-  let sent;
-  host.ai = async (params, onChunk) => { sent = params; onChunk({ content: '好的' }); };
+  // uTools AI 判断流式与否只看有没有传回调，AiOptions 里压根没有 `stream` 这个键。
+  // 这个测试以前断言的是 `sent.stream`——一个发过去就被丢掉的字段，于是「非流输出」开关
+  // 在这条线路上怎么拨都是流式，测试却一直是绿的。
+  let gotCallback;
+  host.ai = async (params, onChunk) => {
+    gotCallback = typeof onChunk === 'function';
+    onChunk?.({ content: '好的' });
+    return { content: '好的' };
+  };
 
   await store.send('提问');
-  assert.equal(sent.stream, true);
+  assert.equal(gotCallback, true);
+  assert.equal(store.state.messages.at(-1).content, '好的');
 
   store.state.currentAgent.un_stream = true;
   await store.send('再提问');
-  assert.equal(sent.stream, false);
+  assert.equal(gotCallback, false, '关掉流式输出时不该传回调');
+  assert.equal(store.state.messages.at(-1).content, '好的', '非流式要把整条消息一次写进来');
+});
+
+test('only a match-command payload gets prefilled into the composer', async () => {
+  const originalEnter = host.onPluginEnter;
+  let entered;
+  host.onPluginEnter = (callback) => { entered = callback; };
+  try {
+    await setup();
+    const before = store.enterIntent.value.seq;
+
+    // 敲关键字进来时 payload 就是关键字本身，照着预填会往输入框里塞一句 "funchat"
+    entered({ code: 'funchat', type: 'text', payload: 'funchat', from: 'main' });
+    assert.deepEqual(store.enterIntent.value, { seq: before + 1, text: '' });
+
+    // 划词进来的才是用户真想问的内容
+    entered({ code: 'funchat-over', type: 'over', payload: '帮我翻译这段', from: 'hotkey' });
+    assert.deepEqual(store.enterIntent.value, { seq: before + 2, text: '帮我翻译这段' });
+  } finally {
+    host.onPluginEnter = originalEnter;
+  }
 });
 
 test('cycleAgent walks the list and wraps around', async () => {

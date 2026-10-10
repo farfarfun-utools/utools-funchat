@@ -27,6 +27,16 @@ async function chooseModel() {
   });
   if (picked?.length) form.model = picked[0];
 }
+// uTools AI 只接受 model / messages / tools，这几项发过去会被丢掉（见 services/chat.ts）。
+// 「上下文数」是本地裁剪消息列表用的，两条线路都算数。
+const INERT_ON_UTOOLS = new Set(['max_tokens', 'temperature', 'top_p', 'presence_penalty', 'frequency_penalty']);
+const viaUtools = computed(() => store.state.settings.provider === 'utools');
+
+/** 这一项在当前线路上是不是发不出去。禁用掉，而不是让用户白调一遍。 */
+function inert(row: { key: string }): boolean {
+  return viaUtools.value && INERT_ON_UTOOLS.has(row.key);
+}
+
 const parameterRows = [
   { key: 'contextLength', label: '上下文数', min: 2, max: 36, step: 1 },
   { key: 'max_tokens', label: '最大回复', min: 0, max: 16384, step: 1 },
@@ -114,8 +124,10 @@ defineExpose({ open });
       </section>
 
       <section v-else-if="tab === 'params'" class="dialog-pane params-pane">
-        <label v-for="row in parameterRows" :key="row.key" class="parameter-row"><span>{{ row.label }} <small>?</small></span><input v-model.number="form[row.key]" type="range" :min="row.min" :max="row.max" :step="row.step" :style="rangeStyle(row)"><input v-model.number="form[row.key]" class="parameter-number" type="number" :min="row.min" :max="row.max" :step="row.step"></label>
-        <p>参数留空则跟随全局设置，不会写入该好友。</p>
+        <label v-for="row in parameterRows" :key="row.key" class="parameter-row" :class="{ inert: inert(row) }" :title="inert(row) ? '这项发不到 uTools AI，换到私有API路线才生效' : ''"><span>{{ row.label }} <small>?</small></span><input v-model.number="form[row.key]" type="range" :min="row.min" :max="row.max" :step="row.step" :style="rangeStyle(row)" :disabled="inert(row)"><input v-model.number="form[row.key]" class="parameter-number" type="number" :min="row.min" :max="row.max" :step="row.step" :disabled="inert(row)"></label>
+        <!-- 当前线路根本收不下这些参数时，先说这件事；提示会写进哪里是次要的 -->
+        <p v-if="viaUtools">uTools AI 不接受采样参数，仅「上下文数」有效。</p>
+        <p v-else>参数留空则跟随全局设置，不会写入该好友。</p>
       </section>
 
       <section v-else class="dialog-pane advanced-pane">
@@ -183,6 +195,8 @@ defineExpose({ open });
 .basic-pane.function-pane { min-height: 384px; }
 .params-pane { min-height: 302px; padding: 16px 12px 0; }
 .parameter-row { height: 44px; display: flex; align-items: center; }
+/* 当前线路发不出去的参数：淡掉并禁用，让「调了没反应」变成「看得出调不了」 */
+.parameter-row.inert { opacity: .45; cursor: not-allowed; }
 .parameter-row > span { width: 90px; flex: 0 0 90px; color: var(--color-text-1); }
 .parameter-row > span small { width: 12px; height: 12px; display: inline-grid; place-items: center; border: 1px solid var(--color-border-2); border-radius: 50%; color: var(--color-text-3); font-size: 9px; line-height: 10px; }
 .parameter-row input[type="range"] { min-width: 0; height: 18px; margin: 0 20px 0 0; flex: 1; appearance: none; background: transparent; }

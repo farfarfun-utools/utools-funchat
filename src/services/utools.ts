@@ -6,11 +6,13 @@ const STORAGE_KEY = 'funchat.db.documents';
 
 export type StorageDocument = Record<string, any> & { _id: string; _rev?: string };
 
+// 字段与官方声明的 DbResult 对齐（ok / error 是 boolean 而不是字面量 true），
+// 否则真机的 db 赋不进 UtoolsHost。
 export type DbResult = {
-  ok?: true;
+  ok?: boolean;
   id?: string;
   rev?: string;
-  error?: true;
+  error?: boolean;
   name?: string;
   message?: string;
 };
@@ -31,20 +33,45 @@ export type UtoolsDb = {
 export type AiChunk = { content?: string; reasoning_content?: string };
 export type AiRequest = Promise<unknown> & { abort?: () => void };
 
-export type UtoolsHost = Record<string, any> & {
+/** uTools AI 的模型元信息，字段取自官方声明的 `AiModel`。 */
+export type AiModelInfo = { id: string; label?: string; icon?: string; cost?: number; vision?: boolean };
+
+/**
+ * 从官方类型声明（utools-api-types）里取出我们用到的那部分接口。
+ *
+ * 这一行是个验收点，不是装饰：`Pick` 的键名必须真的存在于官方声明里，写错就是类型错误。
+ * 之前这里是 `Record<string, any> & { ... }`，手写的名字没人校对，于是 `setExpendHeight`
+ * 一直活着——8.0 的名字是 `setExpandHeight`，旧拼写在新客户端上压根不存在，而调用点写的是
+ * `host.setExpendHeight?.()`，可选调用把「这个接口没了」咽了下去，设置里的「插件高度」
+ * 就一直拖了没反应、也不报错。接口名字交给上游兜底之后，这类问题会在构建时就暴露。
+ */
+// 真机和浏览器垫片都一定有的接口，签名直接取官方声明。
+type AlwaysApi = Pick<typeof utools,
+  | 'copyText' | 'copyImage' | 'shellOpenExternal'
+  | 'getUser' | 'getPath' | 'showSaveDialog' | 'outPlugin'
+  | 'onPluginEnter' | 'onPluginOut' | 'onPluginDetach' | 'onDbPull'
+>;
+
+// 可能缺席的接口：AI 能力要看客户端版本和用户是否开通，setExpandHeight 是 8.0 才有的名字。
+type OptionalApi = Pick<typeof utools, 'setExpandHeight'>;
+
+// 刻意不写成 `Record<string, any> & ...`：那个索引签名会把交集里的每个成员都退化成 any，
+// 于是名字写错也照样通过——上面那段注释里的 setExpendHeight 就是这么活下来的。
+// 用到新接口时在这里补一个键名，让它过一遍官方声明的校对。
+export type UtoolsHost = {
   db: UtoolsDb;
   dbStorage: {
     getItem(key: string): any;
     setItem(key: string, value: unknown): void;
     removeItem(key: string): void;
   };
-  ai?: ((params: Record<string, unknown>, onChunk: (chunk?: AiChunk) => void) => AiRequest) | null;
-  /** uTools AI 的可用模型清单，老版本客户端上可能不存在。 */
-  allAiModels?: () => Promise<unknown>;
-  copyText(text: string): unknown;
-  copyImage(dataUrl: string): unknown;
-  shellOpenExternal(url: string): unknown;
-};
+  /** 8.0 之前的拼写（官方拼错了）。新客户端上没有这个名字，留着只为兼容老客户端。 */
+  setExpendHeight?: (height: number) => boolean;
+  // 直接用官方签名（两个重载：传回调是流式，不传则一次性 resolve 出整条消息）。
+  // 可空是因为老客户端没有这个接口、用户也可能没开通 AI 能力。
+  ai?: typeof utools.ai | null;
+  allAiModels?: () => Promise<AiModelInfo[]>;
+} & AlwaysApi & Partial<OptionalApi>;
 
 type WebStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
@@ -116,22 +143,42 @@ function createBrowserUtools(): UtoolsHost {
       setItem: (key, value) => storage.setItem(`funchat.${key}`, JSON.stringify(value)),
       removeItem: (key) => storage.removeItem(`funchat.${key}`),
     },
-    getUser: () => ({ nickname: '本地用户', avatar: '' }),
-    onPluginEnter: (callback: (action: unknown) => void) => callback({ code: 'funchat', type: 'text', payload: '' }),
+    getUser: () => ({ nickname: '本地用户', avatar: '', type: 'user' }),
+    // 进入插件：真机由 uTools 触发，浏览器里立刻回调一次，模拟「刚打开」
+    onPluginEnter: (callback) => callback({ code: 'funchat', type: 'text', payload: '', from: 'main' }),
+    onPluginOut: () => {},
     onPluginDetach: () => {},
-    copyText: (text: string) => navigator.clipboard?.writeText(text),
-    // 浏览器调试时也让「复制为图片」真的能用，而不是静默失败
-    copyImage: async (dataUrl: string) => {
-      if (typeof ClipboardItem !== 'function' || !navigator.clipboard?.write) return;
-      const blob = await (await fetch(dataUrl)).blob();
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+    // 浏览器里没有同步机制，注册了也永远不会回调；留着只为让调用点不必判空
+    onDbPull: () => {},
+    // 浏览器预览里「退出插件」无处可退，什么都不做比关掉标签页更不碍事
+    outPlugin: () => {},
+    setExpandHeight: () => true,
+    // 官方签名是同步返回 boolean，而浏览器的剪贴板接口是异步的：发出去就算成功，
+    // 不把 Promise 泄漏到调用方（真机那边拿到的也只是一个 boolean）
+    copyText: (text) => {
+      void navigator.clipboard?.writeText(text);
+      return true;
+    },
+    // 浏览器调试时也让「复制为图片」真的能用，而不是静默失败。
+    // 官方还接受 Uint8Array，但本项目只传 data URL，二进制那条分支直接报不支持。
+    copyImage: (image) => {
+      if (typeof image !== 'string') return false;
+      if (typeof ClipboardItem !== 'function' || !navigator.clipboard?.write) return false;
+      void (async () => {
+        const blob = await (await fetch(image)).blob();
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      })();
+      return true;
     },
     getPath: () => '',
-    showSaveDialog: () => null,
-    shellOpenExternal: (url: string) => window.open(url, '_blank', 'noopener'),
+    // 浏览器里没有保存对话框，返回 undefined 表示「用户取消了」
+    showSaveDialog: () => undefined,
+    shellOpenExternal: async (url) => { window.open(url, '_blank', 'noopener'); },
     ai: null,
   };
 }
 
 export const host: UtoolsHost = globalThis.utools || createBrowserUtools();
-globalThis.utools ||= host;
+// 垫片只实现了本应用用到的那一小部分接口，当然凑不出完整的官方类型。
+// 这里把它挂回全局，是为了让直接读 window.utools 的第三方代码（html2canvas 之类）不炸。
+globalThis.utools ||= host as unknown as typeof utools;
