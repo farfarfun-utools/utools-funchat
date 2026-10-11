@@ -8,11 +8,11 @@
 
 多角色切换 · 话题回溯 · 一键导出 · 本地优先
 
-[![License](https://img.shields.io/github/license/farfarfun/utools-funchat?color=0ca47f)](LICENSE)
+[![License](https://img.shields.io/github/license/farfarfun-utools/utools-funchat?color=0ca47f)](LICENSE)
 [![uTools](https://img.shields.io/badge/uTools-plugin-0ca47f)](https://u.tools)
 [![Vue](https://img.shields.io/badge/Vue-3-42b883)](https://vuejs.org)
-[![CI](https://github.com/farfarfun/utools-funchat/actions/workflows/ci.yml/badge.svg)](https://github.com/farfarfun/utools-funchat/actions/workflows/ci.yml)
-[![Stars](https://img.shields.io/github/stars/farfarfun/utools-funchat?style=flat&color=0ca47f)](https://github.com/farfarfun/utools-funchat/stargazers)
+[![CI](https://github.com/farfarfun-utools/utools-funchat/actions/workflows/ci.yml/badge.svg)](https://github.com/farfarfun-utools/utools-funchat/actions/workflows/ci.yml)
+[![Stars](https://img.shields.io/github/stars/farfarfun-utools/utools-funchat?style=flat&color=0ca47f)](https://github.com/farfarfun-utools/utools-funchat/stargazers)
 
 </div>
 
@@ -56,7 +56,7 @@
 需要 [Node.js](https://nodejs.org) ≥ 20 与 [pnpm](https://pnpm.io) ≥ 12（`corepack enable` 即可，版本跟着 `package.json#packageManager` 走）。
 
 ```bash
-git clone https://github.com/farfarfun/utools-funchat.git
+git clone https://github.com/farfarfun-utools/utools-funchat.git
 cd utools-funchat
 sh build.sh
 ```
@@ -116,7 +116,7 @@ sh build.sh
 
 > 打包目录是 `utools/` 而不是仓库根目录——uTools 会把 `plugin.json` 所在目录整个打包，放在根目录会把 `.git/` 一并打进去。
 
-欢迎提 [Issue](https://github.com/farfarfun/utools-funchat/issues) 和 PR —— 修 bug、加角色、改界面都可以。给市场加一个好用的角色，是最轻量的贡献方式：编辑 `src/features/navigation/market/` 下对应的 `.ts` 分类文件即可；`src/features/navigation/market-agents.ts` 会自动收集这些分类。
+欢迎提 [Issue](https://github.com/farfarfun-utools/utools-funchat/issues) 和 PR —— 修 bug、加角色、改界面都可以。给市场加一个好用的角色，是最轻量的贡献方式：编辑 `src/features/navigation/market/` 下对应的 `.ts` 分类文件即可；`src/features/navigation/market-agents.ts` 会自动收集这些分类。
 
 ## 说明
 

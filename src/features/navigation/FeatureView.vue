@@ -15,7 +15,7 @@ const category = ref('全部');
 const activeNotice = ref(NOTIFICATIONS[0]?.id || '');
 
 const ORG_URL = 'https://github.com/farfarfun';
-const REPO_URL = 'https://github.com/farfarfun/utools-funchat';
+const REPO_URL = 'https://github.com/farfarfun-utools/utools-funchat';
 
 // 市场角色是单独一个 chunk，进入市场时才下载
 const catalog = ref<MarketAgent[]>([]);
