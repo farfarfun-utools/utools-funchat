@@ -31,6 +31,14 @@ DOMPurify.addHook('afterSanitizeAttributes', (node: Element) => {
   node.setAttribute('rel', 'noopener noreferrer');
 });
 
+// 真正需要内联 style 的只有 KaTeX——它靠 style 摆字形的高度和位置，删了公式就散架。
+// 可 style 出现在别处就是个洞：模型回复里一句 <span style="position:fixed;inset:0;z-index:9">
+// 就能糊住整个界面冒充插件 UI。所以只认公式这一处，其余一律丢掉。
+DOMPurify.addHook('uponSanitizeAttribute', (node: Element, data) => {
+  if (data.attrName !== 'style') return;
+  data.keepAttr = Boolean(node.closest?.('.katex, .katex-display'));
+});
+
 type MathToken = { type: string; raw: string; expression: string; display?: boolean };
 
 function escapeHtml(value: unknown): string {
@@ -105,9 +113,6 @@ const inlineMath = {
 
 marked.use({ extensions: [blockMath, inlineMath] });
 
-// KaTeX 靠 class 与内联 style 定位字形，消毒时必须放行，否则公式会散架
-const SANITIZE_OPTIONS = { ADD_ATTR: ['class', 'style'] };
-
 /**
  * 将用户输入渲染并净化为可安全插入界面的 HTML。
  * @param value 要渲染的 Markdown 内容。
@@ -116,5 +121,6 @@ const SANITIZE_OPTIONS = { ADD_ATTR: ['class', 'style'] };
 export function renderMarkdown(value: unknown): string {
   // 读一下版本号，使 KaTeX 到位后调用方的 computed 会自动再渲染一次
   void katexRevision.value;
-  return DOMPurify.sanitize(marked.parse(String(value ?? ''), { breaks: true, async: false }), SANITIZE_OPTIONS);
+  // class / style 都在 DOMPurify 的默认白名单里，不用再 ADD_ATTR 补一遍
+  return DOMPurify.sanitize(marked.parse(String(value ?? ''), { breaks: true, async: false }));
 }

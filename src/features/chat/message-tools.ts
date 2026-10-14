@@ -67,6 +67,11 @@ export function downloadInBrowser(filename: string, href: string): void {
   link.click();
 }
 
+// 视口外的消息靠 content-visibility 跳过布局，而 html2canvas 量的就是布局：
+// 出图期间得把那层优化关掉，否则图里是一串按占位高度排开的空白。
+// 单条消息出图也走这里，所以开关放在这个唯一的入口上。
+export const capturing = ref(false);
+
 // 存文件与复制到剪贴板共用同一份渲染，保证两种导出的成像完全一致
 /**
  * 将页面元素渲染为 PNG Data URL。
@@ -75,13 +80,19 @@ export function downloadInBrowser(filename: string, href: string): void {
  */
 export async function renderElementImage(element: HTMLElement): Promise<string> {
   const { default: html2canvas } = await import('html2canvas');
-  const canvas = await html2canvas(element, {
-    backgroundColor: getComputedStyle(document.body).getPropertyValue('--color-bg-2').trim() || '#fff',
-    scale: Math.min(devicePixelRatio || 1, 2),
-    useCORS: true,
-    ignoreElements: (node) => node.classList?.contains('message-actions'),
-  });
-  return canvas.toDataURL('image/png');
+  capturing.value = true;
+  await nextTick();
+  try {
+    const canvas = await html2canvas(element, {
+      backgroundColor: getComputedStyle(document.body).getPropertyValue('--color-bg-2').trim() || '#fff',
+      scale: Math.min(devicePixelRatio || 1, 2),
+      useCORS: true,
+      ignoreElements: (node) => node.classList?.contains('message-actions'),
+    });
+    return canvas.toDataURL('image/png');
+  } finally {
+    capturing.value = false;
+  }
 }
 
 /**

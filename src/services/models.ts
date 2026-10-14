@@ -1,4 +1,5 @@
 import { host } from './utools.ts';
+import { trimEndpoint, withApiVersion } from './api-url.ts';
 import type { AiModelInfo } from './utools.ts';
 
 type ModelSource = { provider?: string; baseUrl?: string; apiKey?: string };
@@ -52,13 +53,12 @@ export async function loadUtoolsModelInfo(): Promise<void> {
  * @returns 可请求的模型列表地址；空输入返回空字符串。
  */
 export function normalizeModelsUrl(value: unknown): string {
-  const raw = String(value || '').trim().replace(/#$/u, '');
-  const base = raw.replace(/\/+$/u, '');
+  const base = trimEndpoint(value);
   if (!base) return '';
   // 填的是聊天端点时换成同级的 models，而不是在后面继续拼
   if (base.endsWith('/chat/completions')) return `${base.slice(0, -'/chat/completions'.length)}/models`;
   if (base.endsWith('/models')) return base;
-  return `${base.endsWith('/v1') ? base : `${base}/v1`}/models`;
+  return withApiVersion(base, 'models');
 }
 
 /**

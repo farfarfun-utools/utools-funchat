@@ -2,16 +2,13 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { fetchModels } from '../../services/models.js';
 import { useChatStore } from '../../stores/chat.js';
+import { paramValue, type ParamKey } from '../agents/agent-params.js';
+import ParameterSliders from '../agents/ParameterSliders.vue';
 import ModelPickerDialog from './ModelPickerDialog.vue';
 
 const props = defineProps({ kind: { type: String, required: true } });
 const emit = defineEmits(['close']);
 const store = useChatStore();
-
-function paramValue(value: unknown, fallback: number): number {
-  const parsed = Number(value ?? fallback);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
 
 /* ---------- API 线路 ---------- */
 
@@ -137,26 +134,12 @@ async function chooseModel() {
   saveParams();
 }
 
-type ParamRow = { key: keyof typeof params; label: string; min: number; max: number; step: number };
-
-// uTools AI 只接受 model / messages / tools，采样参数一概丢弃（见 services/chat.ts 的说明）。
-// 「上下文数」是本地裁剪消息列表用的，两条线路都算数，所以不在这张名单里。
-const INERT_ON_UTOOLS = new Set(['max_tokens', 'temperature', 'top_p', 'frequency_penalty', 'presence_penalty']);
 const viaUtools = computed(() => store.state.settings.provider === 'utools');
 
-/** 这一项在当前线路上是不是发不出去。禁用而不是让用户空拖一遍滑块。 */
-function inert(row: ParamRow): boolean {
-  return viaUtools.value && INERT_ON_UTOOLS.has(row.key);
+function setParam(key: ParamKey, value: number) {
+  params[key] = value;
+  saveParams();
 }
-
-const parameterRows: ParamRow[] = [
-  { key: 'contextLength', label: '上下文数', min: 2, max: 36, step: 1 },
-  { key: 'max_tokens', label: '最大回复', min: 0, max: 16384, step: 1 },
-  { key: 'temperature', label: '随机性', min: 0, max: 2, step: 0.1 },
-  { key: 'top_p', label: '核采样', min: 0, max: 1, step: 0.1 },
-  { key: 'frequency_penalty', label: '频率惩罚', min: -2, max: 2, step: 0.1 },
-  { key: 'presence_penalty', label: '存在惩罚', min: -2, max: 2, step: 0.1 },
-];
 
 // 只写进 store 的临时覆盖层，好友文档一个字节都不动，换话题即失效
 function saveParams() {
@@ -170,10 +153,6 @@ function saveParams() {
     frequency_penalty: params.frequency_penalty,
     presence_penalty: params.presence_penalty,
   });
-}
-
-function rangeStyle(row: ParamRow) {
-  return { '--range-progress': `${((Number(params[row.key]) - row.min) / (row.max - row.min)) * 100}%` };
 }
 </script>
 
@@ -278,8 +257,7 @@ function rangeStyle(row: ParamRow) {
         <small>手填也可以，注意区分大小写。</small>
       </span>
     </label>
-    <label v-for="row in parameterRows" :key="row.key" class="parameter-row" :class="{ inert: inert(row) }" :title="inert(row) ? '这项发不到 uTools AI，换到私有API路线才生效' : ''"><span>{{ row.label }} <small>ⓘ</small></span><input v-model.number="params[row.key]" type="range" :min="row.min" :max="row.max" :step="row.step" :style="rangeStyle(row)" :disabled="inert(row)" @input="saveParams"><input v-model.number="params[row.key]" class="parameter-number" type="number" :min="row.min" :max="row.max" :step="row.step" :disabled="inert(row)" @change="saveParams"></label>
-
+    <ParameterSliders :values="params" @update="setParam" />
   </section>
 
   <!-- 两个面板共用一个弹窗实例：分别挂在两个 v-if 分支里的话，kind 切换时 ref 的
@@ -362,14 +340,4 @@ function rangeStyle(row: ParamRow) {
 .model-browse:hover { color: var(--color-primary); border-color: var(--color-primary); }
 .model-browse .iconfont { font-size: 14px; }
 .model-control > small { display: block; margin-top: 6px; color: var(--color-text-3); font-size: 12px; }
-.parameter-row { height: 44px; display: flex; align-items: center; }
-/* 当前线路发不出去的参数：淡掉并禁用，让「调了没反应」变成「看得出调不了」 */
-.parameter-row.inert { opacity: .45; cursor: not-allowed; }
-.parameter-row > span { width: 90px; flex: 0 0 90px; color: var(--color-text-1); }
-.parameter-row > span small { color: #b7bdc7; font-size: 11px; }
-.parameter-row input[type="range"] { min-width: 0; height: 18px; margin: 0 20px 0 0; flex: 1; appearance: none; background: transparent; }
-.parameter-row input[type="range"]::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(to right, var(--color-primary) 0 var(--range-progress), var(--color-border-2) var(--range-progress) 100%); }
-.parameter-row input[type="range"]::-webkit-slider-thumb { width: 12px; height: 12px; margin-top: -5px; appearance: none; border: 2px solid var(--color-primary); border-radius: 50%; background: var(--color-bg-2); }
-.parameter-number { width: 80px; height: 32px; padding: 0 12px; border: 0; border-radius: 3px; outline: 0; background: var(--color-fill-2); text-align: center; }
-.parameter-number::-webkit-inner-spin-button, .parameter-number::-webkit-outer-spin-button { appearance: none; margin: 0; }
 </style>

@@ -2,8 +2,10 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-PLUGIN_DIR="$ROOT_DIR/utools"
 cd "$ROOT_DIR"
+# 一律用相对路径喂给 node：CI 的 Windows 作业跑在 Git Bash 里，$ROOT_DIR 是 /d/a/... 这种
+# MSYS 路径，Windows 版 node 解析不了；而 node 继承的工作目录本来就是这里。
+PLUGIN_DIR=utools
 
 command -v node >/dev/null || { echo "error: Node.js is required" >&2; exit 1; }
 command -v pnpm >/dev/null || { echo "error: pnpm is required, run: corepack enable" >&2; exit 1; }
@@ -25,10 +27,19 @@ pnpm test
 pnpm typecheck
 # eslint 的 error 也已清零，同样纳入。--quiet 只看 error：剩下的一千多条 warning 全是
 # .vue 的排版类（每行几个属性、单标签怎么闭合），封个数字没人会去维护。
-# 别在这里用 pnpm lint——它带 --fix，会把全仓 .vue 重排一遍。
 pnpm lint:check
 node --check "$PLUGIN_DIR/preload.js"
-node -e "JSON.parse(require('fs').readFileSync('$PLUGIN_DIR/plugin.json', 'utf8'))"
+# 版本号在 package.json 和 plugin.json 里各写一份：前者给工具链，后者是 uTools 判断「有没有
+# 新版」的唯一依据。漂移了不会有任何报错，只会表现成「发版了但用户收不到更新」，所以在这里卡住。
+node -e "
+  const fs = require('fs');
+  const plugin = JSON.parse(fs.readFileSync('$PLUGIN_DIR/plugin.json', 'utf8'));
+  const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+  if (plugin.version !== pkg.version) {
+    console.error('error: version mismatch, package.json=' + pkg.version + ' plugin.json=' + plugin.version);
+    process.exit(1);
+  }
+"
 rm -rf -- "$PLUGIN_DIR/dist"
 pnpm build
 test -f "$PLUGIN_DIR/dist/index.html"

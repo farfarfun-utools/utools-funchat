@@ -4,25 +4,12 @@ import { useChatStore } from '../../stores/chat.js';
 import ConfirmDialog from '../../components/ConfirmDialog.vue';
 import AgentAvatar from '../agents/AgentAvatar.vue';
 import { historyMatcher } from '../search/search.js';
-import { estimateConversationTokens } from './token-count.js';
 import type { History } from '../../types.ts';
 
 const store = useChatStore();
 const confirmDialog = ref();
 const query = ref('');
 const tab = ref('history');
-
-// 同一条话题只在内容变化后才重算，避免长列表反复遍历全部消息
-const tokenCache = new Map<string, number>();
-function historyTokens(history: History): number {
-  const key = `${history._id}@${history.updatedDate || ''}`;
-  let cached = tokenCache.get(key);
-  if (cached === undefined) {
-    cached = estimateConversationTokens(history.messages || []);
-    tokenCache.set(key, cached);
-  }
-  return cached;
-}
 
 function formatTokens(count: number): string {
   if (count >= 10000) return `${(count / 1000).toFixed(0)}k`;
@@ -35,7 +22,8 @@ const filtered = computed(() => {
   const matches = historyMatcher(query.value);
   return store.agentHistories.value
     .filter((history) => (tab.value === 'history' ? !history.isFavorite : history.isFavorite) && matches(history))
-    .map((history) => ({ history, tokens: historyTokens(history) }));
+    // Token 数在落盘时就算好了，列表不必再把正文翻一遍
+    .map((history) => ({ history, tokens: history.tokens || 0 }));
 });
 
 const totalTokens = computed(() => filtered.value.reduce((sum, item) => sum + item.tokens, 0));

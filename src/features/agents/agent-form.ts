@@ -1,5 +1,19 @@
 import type { Agent, AgentFormValues, AgentParams } from '../../types.ts';
 
+// 内置的「使用帮助」好友：data/agents.json 里写死的这个 _id 就是它的身份证，
+// 删掉它用户就再也看不到使用说明了，所以右键菜单里的删除是禁用的。
+// 以前这串数字直接埋在 AgentList 的模板里，换成常量后至少能搜得到、改得动。
+const BUILTIN_HELP_AGENT_ID = 'ai@0000000000001';
+
+/**
+ * 判断是否为随插件分发、不允许删除的内置好友。
+ * @param agent 待判断的好友；传空视为否。
+ * @returns 是内置好友则为 `true`。
+ */
+export function isBuiltinAgent(agent: Agent | null | undefined): boolean {
+  return agent?._id === BUILTIN_HELP_AGENT_ID;
+}
+
 export const OPTIONAL_PARAM_DEFAULTS = {
   max_tokens: 0,
   temperature: 0.6,
@@ -7,6 +21,11 @@ export const OPTIONAL_PARAM_DEFAULTS = {
   presence_penalty: 0,
   frequency_penalty: 0,
 };
+
+/** 可选模型参数的字段名。`Object.keys` 只给 `string[]`，拿它当索引会退回 any。 */
+export type OptionalParamKey = keyof typeof OPTIONAL_PARAM_DEFAULTS;
+
+const OPTIONAL_PARAM_KEYS = Object.keys(OPTIONAL_PARAM_DEFAULTS) as OptionalParamKey[];
 
 const FORM_DEFAULTS: AgentFormValues = {
   model: '',
@@ -39,8 +58,8 @@ const FORM_DEFAULTS: AgentFormValues = {
 export function agentFormValues(agent: Agent | null | undefined): AgentFormValues {
   const values: AgentFormValues = { ...FORM_DEFAULTS, quick_questions: [] };
   if (!agent) return values;
-  for (const [key, fallback] of Object.entries(OPTIONAL_PARAM_DEFAULTS)) {
-    values[key] = Number(agent.params?.[key] ?? fallback);
+  for (const key of OPTIONAL_PARAM_KEYS) {
+    values[key] = Number(agent.params?.[key] ?? OPTIONAL_PARAM_DEFAULTS[key]);
   }
   return Object.assign(values, {
     model: agent.params?.model || '',
@@ -73,10 +92,10 @@ export function agentFormValues(agent: Agent | null | undefined): AgentFormValue
  * @returns 无返回值。
  */
 export function writeOptionalParams(target: AgentParams, original: AgentParams | undefined, values: AgentFormValues): void {
-  for (const [key, fallback] of Object.entries(OPTIONAL_PARAM_DEFAULTS)) {
+  for (const key of OPTIONAL_PARAM_KEYS) {
     const next = Number(values[key]);
     if (!Number.isFinite(next)) continue;
-    if (key in (original || {}) || next !== fallback) target[key] = next;
+    if (key in (original || {}) || next !== OPTIONAL_PARAM_DEFAULTS[key]) target[key] = next;
     else delete target[key];
   }
 }

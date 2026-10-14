@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
+import { useDismissable } from '../../composables/use-dismissable.js';
+import { isBuiltinAgent } from './agent-form.js';
 import { filterHistoryRecords } from '../search/search.js';
 import { useChatStore } from '../../stores/chat.js';
 import ConfirmDialog from '../../components/ConfirmDialog.vue';
@@ -42,9 +44,7 @@ function openContextMenu(event: MouseEvent, agent: Agent) {
   contextMenu.open = true;
 }
 
-function closeContextMenu(event: Event) {
-  if (!menuElement.value?.contains(event.target as Node)) contextMenu.open = false;
-}
+useDismissable(menuElement, () => contextMenu.open, () => { contextMenu.open = false; });
 
 function editAgent() {
   const agent = contextMenu.agent;
@@ -63,21 +63,6 @@ function deleteFromMenu() {
   if (agent) deleteSelectedAgent(agent);
 }
 
-// 关掉右键菜单就算消费掉这次 Esc：App 那层的 Esc 是「退出插件」，一次按键只剥一层
-function closeOnEscape(event: KeyboardEvent) {
-  if (event.key !== 'Escape' || !contextMenu.open) return;
-  event.preventDefault();
-  contextMenu.open = false;
-}
-
-onMounted(() => {
-  document.addEventListener('pointerdown', closeContextMenu);
-  document.addEventListener('keydown', closeOnEscape);
-});
-onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', closeContextMenu);
-  document.removeEventListener('keydown', closeOnEscape);
-});
 </script>
 
 <template>
@@ -114,8 +99,11 @@ onBeforeUnmount(() => {
       <button type="button" class="active"><span>默认</span></button>
     </div>
     <div class="agents-scroll">
-      <article v-for="agent in filteredAgents" :key="agent._id" class="agent-item"
-        :class="{ active: store.state.currentAgent?._id === agent._id }" @click="selectAgent(agent)" @contextmenu.prevent="openContextMenu($event, agent)">
+      <article v-for="agent in filteredAgents" :key="agent._id" class="agent-item" tabindex="0" role="button"
+        :aria-current="store.state.currentAgent?._id === agent._id ? 'true' : undefined"
+        :class="{ active: store.state.currentAgent?._id === agent._id }" @click="selectAgent(agent)"
+        @keydown.enter.prevent="selectAgent(agent)" @keydown.space.prevent="selectAgent(agent)"
+        @contextmenu.prevent="openContextMenu($event, agent)">
         <AgentAvatar :agent="agent" :size="36" />
         <div v-if="!store.state.sidebarCollapsed" class="agent-copy">
           <b>{{ agent.nickname }}</b>
@@ -145,7 +133,7 @@ onBeforeUnmount(() => {
         {{ contextMenu.agent?.is_top ? '取消置顶' : '置顶' }}
       </button>
       <button type="button" role="menuitem" @click="editAgent"><svg width="16" height="16" viewBox="0 0 48 48" fill="none" aria-hidden="true"><circle cx="24" cy="11" r="7" stroke="var(--color-icon)" stroke-width="3"></circle><path d="M4 41C4 32.1634 12.0589 25 22 25" stroke="var(--color-icon)" stroke-width="3" stroke-linecap="round"></path><path d="M31 42L41 32L37 28L27 38V42H31Z" stroke="var(--color-icon)" stroke-width="3" stroke-linejoin="round"></path></svg>编辑</button>
-      <button type="button" role="menuitem" :disabled="contextMenu.agent?._id === 'ai@0000000000001'" @click="deleteFromMenu"><svg width="16" height="16" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M19 20C22.866 20 26 16.866 26 13S22.866 6 19 6 12 9.134 12 13s3.134 7 7 7Z" stroke="var(--color-icon)" stroke-width="3"></path><path d="M33 31L41 39M33 39L41 31" stroke="var(--color-icon)" stroke-width="3" stroke-linecap="round"></path><path d="M27 28H18.8C9.2 28 6 31.2 6 40.8V42H27" stroke="var(--color-icon)" stroke-width="3" stroke-linecap="round"></path></svg>删除</button>
+      <button type="button" role="menuitem" :disabled="isBuiltinAgent(contextMenu.agent)" @click="deleteFromMenu"><svg width="16" height="16" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M19 20C22.866 20 26 16.866 26 13S22.866 6 19 6 12 9.134 12 13s3.134 7 7 7Z" stroke="var(--color-icon)" stroke-width="3"></path><path d="M33 31L41 39M33 39L41 31" stroke="var(--color-icon)" stroke-width="3" stroke-linecap="round"></path><path d="M27 28H18.8C9.2 28 6 31.2 6 40.8V42H27" stroke="var(--color-icon)" stroke-width="3" stroke-linecap="round"></path></svg>删除</button>
     </div>
   </Teleport>
 </template>
@@ -185,6 +173,9 @@ onBeforeUnmount(() => {
 .agents-scroll::-webkit-scrollbar { width: 0; height: 0; }
 .agent-item { position: relative; height: 60px; padding: 0 16px; display: flex; align-items: center; cursor: pointer; transition: background .15s ease; }
 .agent-item:hover, .agent-item.active { background: var(--color-fill-2); }
+/* 行是 article 不是 button，全局那条 focus-visible 规则管不到它；
+   这列贴着窗口左边，描边往外画会被裁掉半条，所以收到里面来 */
+.agent-item:focus-visible { outline: 2px solid rgba(var(--primary-6), .5); outline-offset: -2px; }
 .agent-copy { min-width: 0; margin-left: 12px; display: flex; flex: 1; flex-direction: column; }
 .agent-copy b { overflow: hidden; font-size: 13px; font-weight: 500; line-height: 1.5715; color: var(--color-text-2); text-overflow: ellipsis; white-space: nowrap; }
 .agent-copy small { overflow: hidden; display: flex; align-items: center; color: var(--color-text-3); font-size: 12px; line-height: 1.5715; text-overflow: ellipsis; white-space: nowrap; }

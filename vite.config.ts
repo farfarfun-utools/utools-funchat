@@ -32,5 +32,20 @@ export default defineConfig({
   base: './',
   plugins: [vue(), dropLegacyKatexFonts()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
-  build: { outDir: 'utools/dist', emptyOutDir: true, target: 'es2022' },
+  build: {
+    outDir: 'utools/dist',
+    emptyOutDir: true,
+    target: 'es2022',
+    rollupOptions: {
+      output: {
+        // 把不随版本变动的第三方库拆出去。uTools 更新插件是整包替换，拆块省不了下载量，
+        // 但首屏要解析的那个模块从 260 kB 降到 100 kB 上下，而且 vendor 块可以和应用代码
+        // 并行编译；更实际的收益是产物可读——哪次提交把包撑胖了，一眼能看出来是谁。
+        manualChunks: {
+          vue: ['vue'],
+          markdown: ['marked', 'dompurify'],
+        },
+      },
+    },
+  },
 });

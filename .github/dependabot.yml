@@ -1,0 +1,28 @@
+version: 2
+updates:
+  # 仓库迁到 farfarfun-utools 之后这份配置一直缺着，历史里的 dependabot PR（#46/#47）
+  # 是迁移前留下的，新仓库下已经没有任何依赖更新在跑。
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    # 次级依赖的补丁版各发一个 PR 没人看得过来，按大类合并成一个
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      production-dependencies:
+        dependency-type: production
+        update-types: [minor, patch]
+    commit-message:
+      prefix: build(deps)
+      prefix-development: build(deps-dev)
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: ci

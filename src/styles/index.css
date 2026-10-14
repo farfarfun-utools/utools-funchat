@@ -1,3 +1,9 @@
+/* 两套 iconfont 以前是 index.html 里的两个 <link>，各自一次渲染阻塞请求，而且放在 public/
+   下拿不到内容哈希——改了图标字体、文件名不变，装过旧版的客户端会继续用缓存里的旧字形。
+   搬进构建流程后它们并进主 CSS，woff2 也跟着带上哈希。 */
+@import '../fonts/iconfont/iconfont.css';
+@import '../fonts/avatar/iconfont.css';
+
 :root {
   color-scheme: light;
   --primary-1: 231, 250, 246;

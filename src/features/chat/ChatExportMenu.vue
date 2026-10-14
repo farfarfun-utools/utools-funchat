@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
+import { useDismissable } from '../../composables/use-dismissable.js';
 import { host } from '../../services/utools.js';
 import { useChatStore } from '../../stores/chat.js';
 import { renderMarkdown } from './markdown.js';
@@ -18,7 +19,7 @@ const items = [
   { label: '导出图片', value: 'image', icon: 'image' },
   { label: '导出Markdown', value: 'markdown', icon: 'markdown' },
   { label: '导出HTML', value: 'html', icon: 'html' },
-  { label: '导出DOCX', value: 'docx', icon: 'docx' },
+  { label: '导出Word', value: 'word', icon: 'docx' },
   { label: '导出PDF', value: 'pdf', icon: 'pdf' },
 ];
 
@@ -62,6 +63,14 @@ function htmlDocument() {
   return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>${store.state.currentAgent?.nickname || 'AI'} 对话</title><style>body{max-width:860px;margin:40px auto;padding:0 24px;color:#374151;font:14px/1.8 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}pre{padding:14px;overflow:auto;color:#e8eaed;background:#282c34;border-radius:5px}img{max-width:100%}table{border-collapse:collapse}th,td{padding:6px 10px;border:1px solid #e5e6eb}</style></head><body>${body}</body></html>`;
 }
 
+// Word 认这组 office 命名空间：带上它，打开的是一份排好版的 Word 文档而不是一张网页
+function wordDocument() {
+  return htmlDocument().replace(
+    '<html lang="zh-CN">',
+    '<html lang="zh-CN" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">',
+  );
+}
+
 async function save(content: string, extension: string, type: string) {
   const name = filename(extension);
   const saved = await saveToDisk({
@@ -94,32 +103,18 @@ async function select(value: string) {
   if (messages) await withAllExpanded(() => saveElementImage(messages, store.state.currentAgent?.nickname || 'chat'));
   if (value === 'markdown') await save(markdown.value, 'md', 'text/markdown;charset=utf-8');
   if (value === 'html') await save(htmlDocument(), 'html', 'text/html;charset=utf-8');
-  if (value === 'docx') await save(htmlDocument(), 'docx', 'application/msword');
+  // 导出的其实是一份 HTML，不是 OOXML。以前它叫 .docx——Word 看到扩展名和内容对不上会
+  // 直接弹警告甚至拒绝打开。换成 .doc 就是 Word 一直认的那种「HTML 版 Word 文档」，
+  // 双击能开、排版也在；想要真 docx 得引一个几百 KB 的生成库，不值当。
+  if (value === 'word') await save(wordDocument(), 'doc', 'application/msword');
   if (value === 'pdf') printPdf();
 }
 
-function closeFromOutside(event: Event) {
-  if (!root.value?.contains(event.target as Node)) closeMenu();
-}
+useDismissable(root, () => open.value, closeMenu);
 
-// 这些浮层不是原生 dialog，Esc 不会自动关，得自己接。
-// 有模态弹窗开着时让它自己处理 Esc，别越过它去关菜单。
-// 真的关掉了就 preventDefault：Esc 在 App 那层是「退出插件」，一次按键只该剥掉一层。
-function closeOnEscape(event: KeyboardEvent) {
-  if (event.key !== 'Escape' || !open.value || document.querySelector('dialog[open]')) return;
-  event.preventDefault();
-  closeMenu();
-}
-
-onMounted(() => {
-  document.addEventListener('pointerdown', closeFromOutside);
-  document.addEventListener('keydown', closeOnEscape);
-});
 onBeforeUnmount(() => {
   clearTimeout(hoverTimer);
   clearTimeout(closeTimer);
-  document.removeEventListener('pointerdown', closeFromOutside);
-  document.removeEventListener('keydown', closeOnEscape);
 });
 </script>
 

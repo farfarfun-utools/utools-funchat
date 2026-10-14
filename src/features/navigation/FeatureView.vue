@@ -4,43 +4,57 @@ import { host } from '../../services/utools.js';
 import { useChatStore } from '../../stores/chat.js';
 import { agentFormValues } from '../agents/agent-form.js';
 import AgentAvatar from '../agents/AgentAvatar.vue';
-import { loadMarketAgents, marketCategories, type MarketAgent } from './market-agents.js';
+import { ALL_CATEGORY, MARKET_CATEGORIES, loadMarketAgents, type MarketAgent } from './market-agents.js';
 import { NOTIFICATIONS } from './notifications.js';
 
 const props = defineProps({ view: { type: String, required: true } });
 
 const store = useChatStore();
 const query = ref('');
-const category = ref('全部');
+const category = ref(ALL_CATEGORY);
 const activeNotice = ref(NOTIFICATIONS[0]?.id || '');
 
 const ORG_URL = 'https://github.com/farfarfun';
 const REPO_URL = 'https://github.com/farfarfun-utools/utools-funchat';
 
-// 市场角色是单独一个 chunk，进入市场时才下载
+// 市场角色按分类各成一个 chunk，点到哪个分类下哪一个。
+// 分类名是静态的，所以 tab 不用等任何下载就能画出来。
+const categories = [ALL_CATEGORY, ...MARKET_CATEGORIES];
 const catalog = ref<MarketAgent[]>([]);
+const loaded = ref('');
 const catalogLoading = ref(false);
 const catalogError = ref('');
+let request = 0;
 
-watch(() => props.view, async (view) => {
-  if (view !== 'prompts' || catalog.value.length || catalogLoading.value) return;
+async function loadCatalog(): Promise<void> {
+  const wanted = category.value;
+  // 搜索框只在当前分类里筛（一直如此），所以它不影响该下哪些文件
+  if (props.view !== 'prompts' || loaded.value === wanted) return;
+  const seq = (request += 1);
+  catalog.value = [];
   catalogLoading.value = true;
   catalogError.value = '';
   try {
-    catalog.value = await loadMarketAgents();
+    // 连点几个 tab 时后发的先回是常事，过期的那份直接丢掉
+    const agents = await loadMarketAgents(wanted, (partial) => {
+      if (seq === request) catalog.value = partial;
+    });
+    if (seq !== request) return;
+    catalog.value = agents;
+    loaded.value = wanted;
   } catch (error) {
-    catalogError.value = error instanceof Error ? error.message : String(error);
+    if (seq === request) catalogError.value = error instanceof Error ? error.message : String(error);
   } finally {
-    catalogLoading.value = false;
+    if (seq === request) catalogLoading.value = false;
   }
-}, { immediate: true });
+}
 
-const categories = computed(() => marketCategories(catalog.value));
+watch([() => props.view, category], loadCatalog, { immediate: true });
 const installedNames = computed(() => new Set(store.state.agents.map((agent) => agent.nickname)));
 const marketAgents = computed(() => {
   const value = query.value.trim().toLocaleLowerCase('zh-CN');
   return catalog.value.filter((item) => {
-    if (category.value !== '全部' && item.category !== category.value) return false;
+    if (category.value !== ALL_CATEGORY && item.category !== category.value) return false;
     if (!value) return true;
     return `${item.nickname} ${item.info} ${item.prompt}`.toLocaleLowerCase('zh-CN').includes(value);
   });

@@ -1,10 +1,12 @@
 import { messageText } from '../chat/token-count.ts';
 import type { ChatMessage } from '../../types.ts';
 
-// 只要求排序键和消息体，这样搜索既能用在完整的历史文档上，也能用在测试里的简化记录上。
-type HistoryRecord = Record<string, any> & {
+// 只要求排序键，正文从 searchText（落盘时抽好的纯文本）或 messages 里取，
+// 这样搜索既能用在历史索引上，也能用在测试里的简化记录上。
+type HistoryRecord = Record<string, unknown> & {
   title?: string;
-  messages: ChatMessage[];
+  searchText?: string;
+  messages?: ChatMessage[];
   sortKey: number;
 };
 
@@ -15,13 +17,15 @@ function normalize(value: unknown): string {
 // 侧边栏的全局搜索每敲一个键都要重新过一遍全部历史，而拼小写长串的代价和消息总字数成正比：
 // 300 条会话就是每次按键几 MB 的字符串操作。按记录对象缓存，落盘时 upsertHistory 会换上新的
 // 记录对象，WeakMap 条目自然失效；title / messages 的恒等比较再兜住原地改写的情况。
-const haystackCache = new WeakMap<object, { title: unknown; messages: unknown; text: string }>();
+const haystackCache = new WeakMap<object, { title: unknown; source: unknown; text: string }>();
 
 function haystackOf(record: HistoryRecord): string {
+  const source = record.searchText ?? record.messages;
   const cached = haystackCache.get(record);
-  if (cached && cached.title === record.title && cached.messages === record.messages) return cached.text;
-  const text = normalize(`${record.title || ''} ${record.messages.map(messageText).join(' ')}`);
-  haystackCache.set(record, { title: record.title, messages: record.messages, text });
+  if (cached && cached.title === record.title && cached.source === source) return cached.text;
+  const body = typeof source === 'string' ? source : (source || []).map(messageText).join(' ');
+  const text = normalize(`${record.title || ''} ${body}`);
+  haystackCache.set(record, { title: record.title, source, text });
   return text;
 }
 

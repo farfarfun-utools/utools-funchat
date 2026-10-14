@@ -4,7 +4,7 @@ import { clonePlain } from './plain-clone.ts';
 // 否则 db 与 dbStorage 会互相覆盖，测试就会在生产不存在的路径上通过。
 const STORAGE_KEY = 'funchat.db.documents';
 
-export type StorageDocument = Record<string, any> & { _id: string; _rev?: string };
+export type StorageDocument = Record<string, unknown> & { _id: string; _rev?: string };
 
 // 字段与官方声明的 DbResult 对齐（ok / error 是 boolean 而不是字面量 true），
 // 否则真机的 db 赋不进 UtoolsHost。
@@ -55,13 +55,14 @@ type AlwaysApi = Pick<typeof utools,
 // 可能缺席的接口：AI 能力要看客户端版本和用户是否开通，setExpandHeight 是 8.0 才有的名字。
 type OptionalApi = Pick<typeof utools, 'setExpandHeight'>;
 
-// 刻意不写成 `Record<string, any> & ...`：那个索引签名会把交集里的每个成员都退化成 any，
-// 于是名字写错也照样通过——上面那段注释里的 setExpendHeight 就是这么活下来的。
+// 刻意不写成 `Record<string, any> & ...`：索引签名不会动已声明字段的类型，但会让**没声明**
+// 的名字也通过检查并退化成 any——上面那段注释里的 setExpendHeight 就是这么活下来的。
 // 用到新接口时在这里补一个键名，让它过一遍官方声明的校对。
 export type UtoolsHost = {
   db: UtoolsDb;
   dbStorage: {
-    getItem(key: string): any;
+    /** 返回的是上次写进去的任意 JSON，键不存在时为 null；调用方自己判形状。 */
+    getItem(key: string): unknown;
     setItem(key: string, value: unknown): void;
     removeItem(key: string): void;
   };

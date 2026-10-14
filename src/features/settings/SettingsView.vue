@@ -29,7 +29,7 @@ async function chooseTargetModel() {
 }
 
 function savePreferences() {
-  store.updateSettings({ ...store.state.settings, ...preferences });
+  store.updateSettings({ ...preferences });
 }
 
 function replaceModels() {

@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import { strict as assert } from 'node:assert';
 import { computed, effect } from 'vue';
-import { loadHistories } from '../src/services/storage.ts';
+import { loadHistories, loadHistoryMessages, saveHistory } from '../src/services/storage.ts';
 import { host } from '../src/services/utools.ts';
 import { useChatStore } from '../src/stores/chat.ts';
 
@@ -45,9 +45,10 @@ test('persists every message instead of only the context window', async () => {
   for (const question of ['问题1', '问题2', '问题3', '问题4']) await store.send(question);
 
   const [history] = await loadHistories();
-  assert.equal(history.messages[0].role, 'system');
+  const stored = await loadHistoryMessages(history._id);
+  assert.equal(stored[0].role, 'system');
   assert.deepEqual(
-    history.messages.filter((message) => message.role === 'user').map((message) => message.content),
+    stored.filter((message) => message.role === 'user').map((message) => message.content),
     ['问题1', '问题2', '问题3', '问题4'],
   );
 });
@@ -71,7 +72,7 @@ test('reopening a topic restores the whole conversation', async () => {
 
   store.newConversation();
   assert.deepEqual(store.state.messages, []);
-  store.openHistory(history);
+  await store.openHistory(history);
 
   assert.deepEqual(
     store.state.messages.filter((message) => message.role === 'user').map((message) => message.content),
@@ -221,7 +222,7 @@ test('images survive a round trip through the stored history', async () => {
   const [history] = store.state.histories;
 
   store.newConversation();
-  store.openHistory(history);
+  await store.openHistory(history);
 
   assert.deepEqual(store.state.messages[0].content.at(-1), { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } });
 });
@@ -262,7 +263,7 @@ test('autoPrefix is prepended to the outgoing question only', async () => {
 
   assert.equal(sent.at(-1).content, '请翻译:你好');
   assert.equal(store.state.messages[0].content, '你好', '界面与历史里不应带前缀');
-  assert.equal((await loadHistories())[0].messages.at(-2).content, '你好');
+  assert.equal((await loadHistoryMessages(store.state.currentAgent.chatId)).at(-2).content, '你好');
 });
 
 test('un_stream decides whether uTools AI gets a stream callback', async () => {
@@ -340,4 +341,163 @@ test('pinned agents stay ahead of everyone else regardless of recent activity', 
   await store.send('你好');
 
   assert.deepEqual(store.state.agents.map((agent) => agent._id), ['ai@1', 'ai@2', 'ai@3'], '置顶好友应始终排在最前');
+});
+
+// 另一台设备往同一条话题里追加消息后，屏幕上这份不能还是旧的：下一次 persistCurrentConversation
+// 会把当前消息整条写回去，旧的一份会直接盖掉对面刚写的内容。
+test('a db pull refreshes the conversation that is open on screen', async () => {
+  const originalPull = host.onDbPull;
+  let pull;
+  host.onDbPull = (callback) => { pull = callback; };
+  try {
+    await setup();
+    host.ai = replyWith('好的');
+    await store.send('你好');
+    const chatId = store.state.currentAgent.chatId;
+
+    // 另一台设备往同一条话题里追加了两句：正文和索引都会被它写一遍
+    const stored = await loadHistoryMessages(chatId);
+    saveHistory({
+      id: chatId,
+      title: '你好',
+      messages: [...stored, { role: 'user', content: '另一台设备的提问' }, { role: 'assistant', content: '另一台设备的回答' }],
+    });
+    pull();
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+    assert.deepEqual(
+      store.state.messages.map((message) => message.content),
+      ['你好', '好的', '另一台设备的提问', '另一台设备的回答'],
+    );
+    assert.deepEqual(store.state.histories, await loadHistories(), '同步后内存与库仍应一致');
+  } finally {
+    host.onDbPull = originalPull;
+  }
+});
+
+test('a db pull leaves the open conversation alone when it did not change', async () => {
+  const originalPull = host.onDbPull;
+  let pull;
+  host.onDbPull = (callback) => { pull = callback; };
+  try {
+    await setup();
+    host.ai = replyWith('好的');
+    await store.send('你好');
+    const before = store.state.messages;
+
+    pull();
+    await new Promise((resolve) => { setTimeout(resolve, 0); });
+
+    assert.equal(store.state.messages, before, '没改过就别换掉消息列表，否则整屏会重新渲染一遍');
+  } finally {
+    host.onDbPull = originalPull;
+  }
+});
+
+test('a redundant save on plugin exit does not rewrite the stored conversation', async () => {
+  await setup();
+  host.ai = replyWith('好的');
+  await store.send('你好');
+  const chatId = store.state.currentAgent.chatId;
+  const before = host.db.get(chatId)._rev;
+
+  store.persistCurrentConversation();
+  store.persistCurrentConversation();
+
+  assert.equal(host.db.get(chatId)._rev, before, '消息没变就不该再整文档写一遍');
+});
+
+test('selecting an agent with a sample dialog does not create a history on its own', async () => {
+  await setup();
+  host.db.put({
+    _id: 'ai@sample',
+    nickname: '带示例的好友',
+    params: {
+      model: 'test',
+      messages: [
+        { role: 'system', content: '系统提示' },
+        { role: 'user', content: '示例提问' },
+        { role: 'assistant', content: '示例回答' },
+      ],
+    },
+  });
+  await store.init();
+  store.selectAgent(store.state.agents.find((agent) => agent._id === 'ai@sample'));
+
+  store.persistCurrentConversation();
+
+  assert.deepEqual(await loadHistories(), [], '只是点开好友看了眼开场白，不该留下一条话题');
+});
+
+// 采样参数发不到 uTools AI（见 agent-params 的 INERT_ON_UTOOLS），要看请求体里到底有什么，
+// 只能走私有 API 那条路：这里把 fetch 换掉，把请求体原样交出来。
+async function captureRequest(run) {
+  store.state.settings.provider = 'openai';
+  store.state.settings.baseUrl = 'https://example.com';
+  const originalFetch = globalThis.fetch;
+  let sent;
+  globalThis.fetch = async (url, init) => {
+    sent = JSON.parse(init.body);
+    return new Response(JSON.stringify({ choices: [{ message: { content: '好的' } }] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  try {
+    await run();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  return sent;
+}
+
+test('临时调参只影响发出去的请求，好友文档一个字节都不动', async () => {
+  await setup();
+  const before = JSON.stringify(host.db.get('ai@1'));
+
+  const sent = await captureRequest(async () => {
+    store.setParamOverrides({ temperature: 1.8, model: '临时模型' });
+    await store.send('你好');
+  });
+
+  assert.equal(sent.temperature, 1.8, '覆盖值要合进请求参数');
+  assert.equal(sent.model, '临时模型');
+  assert.equal(JSON.stringify(host.db.get('ai@1')), before, '覆盖值不该落到好友文档上');
+});
+
+test('contextLength 只用来裁消息，不会被当成模型参数发出去', async () => {
+  await setup({ contextLength: 16 });
+  await captureRequest(async () => {
+    await store.send('问题1');
+    await store.send('问题2');
+  });
+
+  const sent = await captureRequest(async () => {
+    store.setParamOverrides({ contextLength: 1 });
+    await store.send('问题3');
+  });
+
+  assert.equal('contextLength' in sent, false, 'contextLength 是本地裁剪用的，服务端不认');
+  assert.deepEqual(
+    sent.messages.filter((message) => message.role === 'user').map((message) => message.content),
+    ['问题3'],
+    '上下文数改成 1 之后只应带上最后一轮',
+  );
+});
+
+test('换话题、换好友、打开历史都让临时调参失效', async () => {
+  await setup({ agents: 2 });
+  host.ai = replyWith('好的');
+  await store.send('你好');
+  const [history] = await loadHistories();
+
+  for (const act of [
+    () => store.newConversation(),
+    () => store.selectAgent(store.state.agents[1]),
+    () => store.openHistory(history),
+  ]) {
+    store.setParamOverrides({ temperature: 1.8 });
+    await act();
+    assert.deepEqual({ ...store.paramOverrides }, {}, '弹窗标题承诺的是「发起新话题后失效」');
+  }
 });

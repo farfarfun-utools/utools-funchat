@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useDismissable } from '../../composables/use-dismissable.js';
 import { useChatStore } from '../../stores/chat.js';
 import { supportsVision } from '../../services/models.js';
 import ChatPopover from './ChatPopover.vue';
@@ -22,7 +23,7 @@ const dragging = ref(false);
 const notice = ref('');
 let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 let pendingSeed = 0;
-const needsApiSetup = computed(() => store.state.settings.provider !== 'utools' && !store.state.settings.apiKey && !store.state.settings.baseUrl);
+const needsApiSetup = store.needsApiSetup;
 const displayedTokens = computed(() => needsApiSetup.value
   ? 0
   : store.tokenCount.value + estimateTokens(text.value) + attachments.value.length * IMAGE_TOKEN_ESTIMATE);
@@ -127,23 +128,13 @@ function togglePopup(value: string) {
 }
 
 function updateSetting(key: string, value: unknown) {
-  store.updateSettings({ ...store.state.settings, [key]: value });
+  // updateSettings 本身就是 Object.assign 语义，再展开一遍当前设置是多余的——
+  // 还会把此刻可能处于中间态的字段原样写回去
+  store.updateSettings({ [key]: value });
   popup.value = '';
 }
 
-function closeFromOutside(event: Event) {
-  if (!root.value?.contains(event.target as Node)) popup.value = '';
-}
-
-// API 浮层和几个下拉菜单都不是原生 dialog，Esc 不会自动关，得自己接。
-// 但浮层里可能又开着模型选择弹窗，这一下 Esc 该只关那个弹窗，不能把浮层一起收掉。
-// 关掉浮层就算消费掉这次 Esc：App 那层的 Esc 是「退出插件」，一次按键只剥一层
-function closeOnEscape(event: KeyboardEvent) {
-  if (event.key !== 'Escape' || !popup.value) return;
-  if (document.querySelector('dialog[open]')) return;
-  event.preventDefault();
-  popup.value = '';
-}
+useDismissable(root, () => Boolean(popup.value), () => { popup.value = ''; });
 
 // 每次进入插件都把焦点放回输入框。uTools 里「唤出 → 敲 funchat → 回车」之后插件就该能直接
 // 打字，以前中间还要补一次点击；而且退到后台再回来时焦点是丢了的。
@@ -161,16 +152,10 @@ function applyEnterIntent(prefill: string) {
 }
 
 onMounted(() => {
-  document.addEventListener('pointerdown', closeFromOutside);
-  document.addEventListener('keydown', closeOnEscape);
   applyEnterIntent(store.enterIntent.value.text);
   watch(() => store.enterIntent.value.seq, () => { applyEnterIntent(store.enterIntent.value.text); });
 });
-onBeforeUnmount(() => {
-  document.removeEventListener('pointerdown', closeFromOutside);
-  document.removeEventListener('keydown', closeOnEscape);
-  clearTimeout(noticeTimer);
-});
+onBeforeUnmount(() => clearTimeout(noticeTimer));
 </script>
 
 <template>

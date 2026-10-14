@@ -8,7 +8,18 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # plugin.json 声明支持 darwin / win32 / linux，三个平台就都要真的构建过一次。
+    # 只跑 ubuntu 的时候，换行符、大小写敏感的 import、原生依赖的预编译包这些问题
+    # 要等用户装上插件才会暴露。
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    # Windows 作业用 Git Bash 跑同一个 build.sh，不另写一份步骤清单
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -22,7 +33,7 @@ jobs:
           cache: pnpm
 
       # 这一条就是本地的那道门：install --frozen-lockfile → test → typecheck →
-      # lint:check → preload.js 语法 → plugin.json 可解析 → build → 产物齐全。
+      # lint:check → preload.js 语法 → 版本号一致 → build → 产物齐全。
       # 单独再列一遍脚本只会和 build.sh 慢慢不一致，所以直接跑它。
       - name: Build gates
         run: sh build.sh

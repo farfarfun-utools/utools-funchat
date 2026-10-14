@@ -3,15 +3,19 @@ import { computed, reactive, ref } from 'vue';
 import { useChatStore } from '../../stores/chat.js';
 import { agentFormValues } from './agent-form.js';
 import type { Agent, AgentFormValues } from '../../types.ts';
+import type { ParamKey } from './agent-params.ts';
 import AgentAvatar from './AgentAvatar.vue';
+import ParameterSliders from './ParameterSliders.vue';
 import ModelPickerDialog from '../chat/ModelPickerDialog.vue';
 
 const store = useChatStore();
 const dialog = ref();
-const editing = ref<any>(null);
+const editing = ref<Agent | null>(null);
 const tab = ref('basic');
 const question = ref('');
-const form = reactive<Record<string, any>>({});
+// 先用「新建」的那套默认值把字段铺满：open() 里的 Object.assign 只覆盖不删除，
+// 空对象起步的话模板在第一次 open 之前读到的全是 undefined。
+const form = reactive<AgentFormValues>(agentFormValues(null));
 
 const previewAgent = computed(() => ({
   nickname: form.nickname || 'AI',
@@ -27,24 +31,7 @@ async function chooseModel() {
   });
   if (picked?.length) form.model = picked[0];
 }
-// uTools AI 只接受 model / messages / tools，这几项发过去会被丢掉（见 services/chat.ts）。
-// 「上下文数」是本地裁剪消息列表用的，两条线路都算数。
-const INERT_ON_UTOOLS = new Set(['max_tokens', 'temperature', 'top_p', 'presence_penalty', 'frequency_penalty']);
 const viaUtools = computed(() => store.state.settings.provider === 'utools');
-
-/** 这一项在当前线路上是不是发不出去。禁用掉，而不是让用户白调一遍。 */
-function inert(row: { key: string }): boolean {
-  return viaUtools.value && INERT_ON_UTOOLS.has(row.key);
-}
-
-const parameterRows = [
-  { key: 'contextLength', label: '上下文数', min: 2, max: 36, step: 1 },
-  { key: 'max_tokens', label: '最大回复', min: 0, max: 16384, step: 1 },
-  { key: 'temperature', label: '随机属性', min: 0, max: 2, step: 0.1 },
-  { key: 'top_p', label: '词汇属性', min: 0, max: 1, step: 0.1 },
-  { key: 'presence_penalty', label: '话题属性', min: -2, max: 2, step: 0.1 },
-  { key: 'frequency_penalty', label: '重复属性', min: -2, max: 2, step: 0.1 },
-];
 
 function open(agent: Agent | null = null) {
   editing.value = agent;
@@ -64,11 +51,15 @@ function submit() {
     tab.value = 'basic';
     return;
   }
-  // form 是宽松的 Record，展开后拿不回 AgentFormValues 的必填字段，这里显式断言
-  const values = { ...form, paramsFunctions } as AgentFormValues;
+  const values: AgentFormValues = { ...form, paramsFunctions };
   if (editing.value) store.updateAgent(editing.value, values);
   else store.addAgent(values);
   dialog.value.close();
+}
+
+// 表单只是暂存，改完等点「保存」才落盘——和临时调参浮层改完立刻写覆盖层不一样
+function setParam(key: ParamKey, value: number) {
+  form[key] = value;
 }
 
 function addQuestion() {
@@ -76,10 +67,6 @@ function addQuestion() {
   if (!value) return;
   form.quick_questions.push(value);
   question.value = '';
-}
-
-function rangeStyle(row: { key: string; min: number; max: number }) {
-  return { '--range-progress': `${((Number(form[row.key]) - row.min) / (row.max - row.min)) * 100}%` };
 }
 
 defineExpose({ open });
@@ -124,7 +111,7 @@ defineExpose({ open });
       </section>
 
       <section v-else-if="tab === 'params'" class="dialog-pane params-pane">
-        <label v-for="row in parameterRows" :key="row.key" class="parameter-row" :class="{ inert: inert(row) }" :title="inert(row) ? '这项发不到 uTools AI，换到私有API路线才生效' : ''"><span>{{ row.label }} <small>?</small></span><input v-model.number="form[row.key]" type="range" :min="row.min" :max="row.max" :step="row.step" :style="rangeStyle(row)" :disabled="inert(row)"><input v-model.number="form[row.key]" class="parameter-number" type="number" :min="row.min" :max="row.max" :step="row.step" :disabled="inert(row)"></label>
+        <ParameterSliders :values="form" @update="setParam" />
         <!-- 当前线路根本收不下这些参数时，先说这件事；提示会写进哪里是次要的 -->
         <p v-if="viaUtools">uTools AI 不接受采样参数，仅「上下文数」有效。</p>
         <p v-else>参数留空则跟随全局设置，不会写入该好友。</p>
@@ -194,16 +181,6 @@ defineExpose({ open });
 .basic-pane { min-height: 484px; transform: translateY(-.765625px); }
 .basic-pane.function-pane { min-height: 384px; }
 .params-pane { min-height: 302px; padding: 16px 12px 0; }
-.parameter-row { height: 44px; display: flex; align-items: center; }
-/* 当前线路发不出去的参数：淡掉并禁用，让「调了没反应」变成「看得出调不了」 */
-.parameter-row.inert { opacity: .45; cursor: not-allowed; }
-.parameter-row > span { width: 90px; flex: 0 0 90px; color: var(--color-text-1); }
-.parameter-row > span small { width: 12px; height: 12px; display: inline-grid; place-items: center; border: 1px solid var(--color-border-2); border-radius: 50%; color: var(--color-text-3); font-size: 9px; line-height: 10px; }
-.parameter-row input[type="range"] { min-width: 0; height: 18px; margin: 0 20px 0 0; flex: 1; appearance: none; background: transparent; }
-.parameter-row input[type="range"]::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(to right, var(--color-primary) 0 var(--range-progress), var(--color-border-2) var(--range-progress) 100%); }
-.parameter-row input[type="range"]::-webkit-slider-thumb { width: 12px; height: 12px; margin-top: -5px; appearance: none; border: 2px solid var(--color-primary); border-radius: 50%; background: var(--color-bg-2); }
-.parameter-number { width: 80px; height: 32px; padding: 0 12px; border: 0; border-radius: 3px; outline: 0; background: var(--color-fill-2); text-align: center; }
-.parameter-number::-webkit-inner-spin-button, .parameter-number::-webkit-outer-spin-button { appearance: none; }
 .params-pane p { margin-left: 90px; color: var(--color-text-3); font-size: 12px; }
 .advanced-pane { min-height: 135px; padding: 16px 12px 0; }
 .advanced-pane .form-row { margin-bottom: 12px; }

@@ -7,12 +7,13 @@ import ChatExportMenu from './ChatExportMenu.vue';
 import HistoryPanel from './HistoryPanel.vue';
 import ImageLightbox from './ImageLightbox.vue';
 import MessageItem from './MessageItem.vue';
+import { capturing } from './message-tools.js';
 
 const store = useChatStore();
 const scroll = ref();
 const content = ref();
 const greeting = computed(() => ({ role: 'assistant', content: store.state.currentAgent?.content || '' }));
-const needsApiSetup = computed(() => store.state.settings.provider !== 'utools' && !store.state.settings.apiKey && !store.state.settings.baseUrl);
+const needsApiSetup = store.needsApiSetup;
 const quickQuestions = computed(() => (store.state.messages.length ? [] : store.state.currentAgent?.quick_questions || []));
 const apiSetup = reactive({ apiKey: store.state.settings.apiKey || '', baseUrl: store.state.settings.baseUrl || '' });
 // 标题栏显示的话题名：已落盘的话题取它的标题，新话题还没有标题就先留空
@@ -131,7 +132,7 @@ watch(() => [store.state.currentAgent?._id, store.state.currentAgent?.chatId], a
         <i class="iconfont icon-down" aria-hidden="true"></i>
       </button>
       <section ref="scroll" class="messages" aria-live="polite" @scroll.passive="onScroll">
-        <div ref="content" class="messages-content">
+        <div ref="content" class="messages-content" :class="{ capturing }">
           <div v-if="needsApiSetup" class="api-setup-wrap">
             <form class="api-setup-card" @submit.prevent="saveApiSetup">
               <AgentAvatar class="setup-avatar" :agent="store.state.currentAgent" :size="60" />
@@ -184,6 +185,11 @@ watch(() => [store.state.currentAgent?._id, store.state.currentAgent?.chatId], a
 /* 不要给会话列加宽度上限：这是双边气泡布局，头像就该贴着窗口两侧，
    居中限宽会在左右各留出一大片空白 */
 .messages-content { min-height: 100%; padding-top: 20px; }
+/* 几百条消息的会话里，每次滚动浏览器都要把全部气泡重新布局、重新绘制一遍——而屏幕上
+   同时也就放得下三四条。content-visibility 让视口外的气泡跳过布局和绘制，DOM 还在，
+   所以导出、查找、滚动位置都不受影响；contain-intrinsic-size 的 auto 会记住它上次的真实
+   高度，首次用 120px 占位，滚动条长度不至于来回跳。出图时整段都要量真实布局，故除外。 */
+.messages-content:not(.capturing) > :deep(.chat-box-item) { content-visibility: auto; contain-intrinsic-size: auto 120px; }
 .api-setup-wrap { margin: 40px 52px 0; }
 .api-setup-card { position: relative; height: 337px; padding: 110px 32px 32px; border-radius: 12px; background: var(--color-bg-5); }
 .setup-avatar { position: absolute; top: -26px; left: calc(50% - 30px); }

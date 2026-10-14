@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { ref } from 'vue';
+import { useDismissable } from '../../composables/use-dismissable.js';
 import { host } from '../../services/utools.js';
 import { useChatStore } from '../../stores/chat.js';
 import type { ThemePreference } from '../../types.ts';
@@ -24,16 +25,11 @@ const themes: { value: ThemePreference; label: string; icon: string }[] = [
 ];
 
 function setTheme(theme: ThemePreference) {
-  store.updateSettings({ ...store.state.settings, theme });
+  store.updateSettings({ theme });
   themeOpen.value = false;
 }
 
-function closeTheme(event: Event) {
-  if (!themeAnchor.value?.contains(event.target as Node)) themeOpen.value = false;
-}
-
-onMounted(() => document.addEventListener('pointerdown', closeTheme));
-onBeforeUnmount(() => document.removeEventListener('pointerdown', closeTheme));
+useDismissable(themeAnchor, () => themeOpen.value, () => { themeOpen.value = false; });
 </script>
 
 <template>

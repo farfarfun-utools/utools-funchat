@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import { strict as assert } from 'node:assert';
-import { loadAgents, loadHistories, removeAgent, saveAgent, saveHistory, stripImagesToFit } from '../src/services/storage.ts';
+import { loadAgents, loadHistories, loadHistoryMessages, removeAgent, removeHistory, saveAgent, saveHistory, stripImagesToFit } from '../src/services/storage.ts';
 import { host } from '../src/services/utools.ts';
 
 const LEGACY_DOCUMENTS_KEY = 'browser.db';
@@ -47,7 +47,8 @@ test('round-trips history messages and sorts the newest topic first', async () =
   saveHistory({ id: 'chat@ai@1#2000', title: '新话题', messages: [{ role: 'user', content: '再见' }] });
   const histories = await loadHistories();
   assert.deepEqual(histories.map((history) => history.title), ['新话题', '旧话题']);
-  assert.deepEqual(histories[1].messages, [{ role: 'user', content: '你好' }]);
+  assert.equal(histories[1].messages, undefined, '列表只带索引，正文留在 chatbody@ 里');
+  assert.deepEqual(await loadHistoryMessages('chat@ai@1#1000'), [{ role: 'user', content: '你好' }]);
   assert.equal(histories[0].agentId, 'ai@1');
   assert.equal(histories[0].sortKey, 2000);
 });
@@ -74,11 +75,65 @@ test('preserves the original creation date when a topic is re-saved', () => {
 test('deleting an agent also deletes its topics', async () => {
   resetDatabase();
   saveAgent(makeAgent('ai@1'));
-  saveHistory({ id: 'chat@ai@1#1000', title: '话题', messages: [] });
+  saveHistory({ id: 'chat@ai@1#1000', title: '话题', messages: [{ role: 'user', content: '你好' }] });
   saveHistory({ id: 'chat@ai@2#1000', title: '别人的话题', messages: [] });
   removeAgent('ai@1');
   assert.equal(host.db.get('ai@1'), null);
   assert.deepEqual((await loadHistories()).map((history) => history._id), ['chat@ai@2#1000']);
+  assert.deepEqual(host.db.allDocs('chatbody@ai@1#'), [], '正文不能留在库里变成谁也删不掉的垃圾');
+});
+
+/* ---------- 索引与正文分家 ---------- */
+
+test('deleting a topic takes its message body with it', () => {
+  resetDatabase();
+  saveHistory({ id: 'chat@ai@1#1000', title: '话题', messages: [{ role: 'user', content: '你好' }] });
+  assert.equal(host.db.allDocs('chatbody@').length, 1);
+  removeHistory('chat@ai@1#1000');
+  assert.deepEqual(host.db.allDocs('chatbody@'), []);
+});
+
+test('the index carries the token count and the searchable text, the body carries the images', async () => {
+  resetDatabase();
+  const url = 'data:image/png;base64,AAAA';
+  saveHistory({ id: 'chat@ai@1#1000', title: '话题', messages: [imageMessage('看图说话', url)] });
+
+  const [history] = await loadHistories();
+  assert.ok(history.tokens > 0, '列表要显示 Token 数，它得在索引里');
+  assert.ok(history.searchText.includes('看图说话'), '搜索要能搜到正文，纯文本得在索引里');
+  assert.ok(!JSON.stringify(history).includes('base64'), '图片一个字节都不该进索引');
+});
+
+test('只改收藏状态时不重写正文', async () => {
+  resetDatabase();
+  saveHistory({ id: 'chat@ai@1#1000', title: '话题', messages: [{ role: 'user', content: '你好' }] });
+  const before = host.db.get('chatbody@ai@1#1000');
+
+  saveHistory({ id: 'chat@ai@1#1000', title: '话题', favorite: true });
+
+  assert.equal(host.db.get('chat@ai@1#1000').isFavorite, true);
+  assert.equal(host.db.get('chatbody@ai@1#1000')._rev, before._rev, '正文没变就不该多一个版本');
+  assert.deepEqual(await loadHistoryMessages('chat@ai@1#1000'), [{ role: 'user', content: '你好' }]);
+});
+
+test('老版本的单文档话题在读到时就地拆开，正文和索引都还在', async () => {
+  resetDatabase();
+  host.db.put({
+    _id: 'chat@ai@1#1000',
+    title: '老话题',
+    isFavorite: true,
+    createdDate: '2020/1/1 00:00:00',
+    messages: [{ role: 'user', content: '很久以前的提问' }],
+  });
+
+  const [history] = await loadHistories();
+  assert.equal(history.title, '老话题');
+  assert.equal(history.isFavorite, true);
+  assert.equal(history.createdDate, '2020/1/1 00:00:00');
+  assert.ok(history.searchText.includes('很久以前的提问'), '拆开时要把搜索文本补上，否则这条话题再也搜不到');
+  assert.ok(history.tokens > 0);
+  assert.equal(host.db.get('chat@ai@1#1000').messages, undefined, '正文应当已经从索引里摘走');
+  assert.deepEqual(await loadHistoryMessages('chat@ai@1#1000'), [{ role: 'user', content: '很久以前的提问' }]);
 });
 
 /* ---------- 带图会话的体积兜底 ---------- */
@@ -104,13 +159,13 @@ test('drops the oldest image data first and keeps every message text', () => {
   assert.equal(messages[0].content[1].image_url.url, big, '传入的消息不该被改写');
 });
 
-test('saveHistory writes image parts through unchanged', () => {
+test('saveHistory writes image parts through unchanged', async () => {
   resetDatabase();
   const url = 'data:image/png;base64,AAAA';
   saveHistory({ id: 'chat@ai@1#1000', title: '话题', messages: [imageMessage('看图', url)] });
 
-  const stored = host.db.get('chat@ai@1#1000');
-  assert.deepEqual(stored.messages[0].content[1], { type: 'image_url', image_url: { url } });
+  const stored = await loadHistoryMessages('chat@ai@1#1000');
+  assert.deepEqual(stored[0].content[1], { type: 'image_url', image_url: { url } });
 });
 
 /* ---------- 文档库写入语义 ---------- */

@@ -1,4 +1,5 @@
 import { host } from './utools.ts';
+import { trimEndpoint, withApiVersion } from './api-url.ts';
 import type { AiChunk, AiRequest, UtoolsHost } from './utools.ts';
 
 type AiInvoker = NonNullable<UtoolsHost['ai']>;
@@ -20,13 +21,20 @@ type StreamChatOptions = {
 export function normalizeChatUrl(value: unknown): string {
   const raw = String(value || '').trim();
   if (raw.endsWith('#')) return raw.slice(0, -1);
-  const base = raw.replace(/\/$/u, '');
+  const base = trimEndpoint(raw);
   if (!base) return '';
   if (base.endsWith('/chat/completions')) return base;
-  return `${base.endsWith('/v1') ? base : `${base}/v1`}/chat/completions`;
+  return withApiVersion(base, 'chat/completions');
 }
 
-function readChoice(payload: any): string {
+// 各家 OpenAI 兼容服务的回包长得不完全一样：流式在 delta、非流式在 message，
+// 还有直接把文本放在顶层 content 的。字段一律当可选，读不到就当空串。
+type ChatCompletionPayload = {
+  choices?: { delta?: { content?: string }; message?: { content?: string } }[];
+  content?: string;
+};
+
+function readChoice(payload: ChatCompletionPayload | null | undefined): string {
   return payload?.choices?.[0]?.delta?.content
     ?? payload?.choices?.[0]?.message?.content
     ?? payload?.content

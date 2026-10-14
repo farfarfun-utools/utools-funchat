@@ -6,6 +6,7 @@ import { loadUtoolsModelInfo } from '../services/models.ts';
 import {
   loadAgents,
   loadHistories,
+  loadHistoryMessages,
   loadSettings,
   removeAgent,
   removeHistory,
@@ -19,6 +20,7 @@ import {
 import { buildUserContent, hasContent, withPrefix } from '../features/chat/message-content.ts';
 import { estimateConversationTokens, messageText } from '../features/chat/token-count.ts';
 import { writeOptionalParams } from '../features/agents/agent-form.ts';
+import type { ParamOverrides } from '../features/agents/agent-params.ts';
 import type {
   Agent,
   AgentFormValues,
@@ -32,7 +34,7 @@ import type {
 
 // 这些字段在原插件的导出数据里是可选的：值等于默认值且文档原本没有，就不要写进去，
 // 否则「打开设置再保存」会凭空给文档加字段（见 tests/agent-compat.test.ts）。
-const OPTIONAL_AGENT_FIELDS: Record<string, string | boolean> = {
+const OPTIONAL_AGENT_FIELDS = {
   autoPrefix: '',
   status: '',
   callback: '',
@@ -45,6 +47,11 @@ const OPTIONAL_AGENT_FIELDS: Record<string, string | boolean> = {
   un_stream: false,
   isAiSummary: false,
 };
+
+/** 上面这些字段的名字。`Object.keys` 只给 `string[]`，拿它索引 Agent 会退回 any。 */
+type OptionalAgentField = keyof typeof OPTIONAL_AGENT_FIELDS;
+
+const OPTIONAL_AGENT_KEYS = Object.keys(OPTIONAL_AGENT_FIELDS) as OptionalAgentField[];
 
 const state = reactive<AppState>({
   ready: false,
@@ -65,6 +72,13 @@ let activeStream = 0;
 let presetHidden = false;
 const systemTheme: MediaQueryList | undefined = globalThis.matchMedia?.('(prefers-color-scheme: dark)');
 
+// 历史文档里存着 presetPrefix 写进去的那条 system 指令，回填到界面时要去掉：
+// 它由好友文档提供，不该出现在消息列表里。
+async function historyMessages(id: string): Promise<ChatMessage[]> {
+  const messages = await loadHistoryMessages(id);
+  return clonePlain(messages[0]?.role === 'system' ? messages.slice(1) : messages) as ChatMessage[];
+}
+
 function initialMessages(agent: Agent | null): ChatMessage[] {
   const messages = clonePlain(agent?.params?.messages || []);
   return messages[0]?.role === 'system' ? messages.slice(1) : messages;
@@ -78,23 +92,22 @@ function presetPrefix(): ChatMessage[] {
 // 「临时调参」弹窗标题承诺的是「发起新话题后失效」，但直接改好友文档做不到这件事：之后
 // 任何一次 saveAgent（哪怕只是点个置顶）都会把这份临时值顺手写进磁盘，而且换话题也不会退
 // 回去。所以覆盖值单独存一份，只在组请求时合并进去，换话题、换好友、打开旧话题都清空。
-const paramOverrides = reactive<Record<string, any>>({});
+const paramOverrides = reactive<ParamOverrides>({});
 
-function setParamOverrides(next: Record<string, unknown>): void {
+function setParamOverrides(next: ParamOverrides): void {
   Object.assign(paramOverrides, next);
 }
 
 function clearParamOverrides(): void {
-  for (const key of Object.keys(paramOverrides)) delete paramOverrides[key];
+  for (const key of Object.keys(paramOverrides) as (keyof ParamOverrides)[]) delete paramOverrides[key];
 }
 
-// contextLength 挂在好友文档上而不是 params 里，合并时要排除掉，否则会被当成模型参数发出去
 function overriddenParams(agent: Agent): Agent {
-  const keys = Object.keys(paramOverrides).filter((key) => key !== 'contextLength');
-  if (!keys.length) return agent;
-  const params: AgentParams = { ...agent.params };
-  for (const key of keys) params[key] = paramOverrides[key];
-  return { ...agent, params };
+  // contextLength 挂在好友文档上而不是 params 里，合并时要摘掉，否则会被当成模型参数发出去
+  const overrides: ParamOverrides = { ...paramOverrides };
+  delete overrides.contextLength;
+  if (!Object.keys(overrides).length) return agent;
+  return { ...agent, params: { ...agent.params, ...overrides } };
 }
 
 function requestMessages(): ChatMessage[] {
@@ -126,9 +139,27 @@ function dropHistories(match: (history: History) => boolean): void {
   state.histories = state.histories.filter((history) => !match(history));
 }
 
+// 退出插件（onPluginOut / pagehide）时会兜底存一次，可 uTools 里「按下 Esc 回主面板」
+// 是个高频动作，而每次 saveHistory 都要把整段对话连同 base64 图片重新序列化、整文档写回。
+// 正常路径上每改一次消息就已经存过了，所以记一个脏标记：没改过就什么都不做。
+let unsavedMessages = false;
+
+function touchMessages(): void {
+  unsavedMessages = true;
+}
+
+// 消息列表被整体换成「库里那一份」（切好友、打开历史、同步拉取）时，内存和库是一致的，
+// 没有待存的改动
+function adoptStoredMessages(messages: ChatMessage[]): void {
+  state.messages = messages;
+  unsavedMessages = false;
+}
+
 function removeMessage(message: ChatMessage): void {
   const at = state.messages.indexOf(message);
-  if (at >= 0) state.messages.splice(at, 1);
+  if (at < 0) return;
+  state.messages.splice(at, 1);
+  touchMessages();
 }
 
 function applyTheme(): void {
@@ -166,12 +197,20 @@ async function refreshFromSync(): Promise<void> {
   if (state.loading) return;
   const currentId = state.currentAgent?._id;
   const chatId = state.currentAgent?.chatId;
+  // 同步前这条话题的版本号，用来判断远端是不是真改过它——没改就别换掉 state.messages，
+  // 否则每次 onDbPull 都要把整屏消息重新渲染一遍
+  const openRev = chatId ? state.histories.find((item) => item._id === chatId)?._rev : undefined;
   state.agents = await loadAgents();
   state.histories = await loadHistories();
   sortAgents();
   const current = state.agents.find((agent) => agent._id === currentId);
   if (current && chatId) current.chatId = chatId;
   state.currentAgent = current || state.agents[0] || null;
+  // 别的设备往同一条话题里追加了消息时，屏幕上这份是旧的；更要紧的是下一次
+  // persistCurrentConversation 会拿这份旧的整条写回去，对面刚写的内容就没了。
+  // 话题在别处被删掉的情况不动屏幕——正看着的内容不该凭空消失。
+  const opened = chatId ? state.histories.find((item) => item._id === chatId) : undefined;
+  if (opened && opened._rev !== openRev) adoptStoredMessages(await historyMessages(opened._id));
 }
 
 function registerHostEvents(): void {
@@ -217,7 +256,7 @@ async function init(): Promise<void> {
   state.histories = await loadHistories();
   sortAgents();
   state.currentAgent = state.agents[0] || null;
-  state.messages = [];
+  adoptStoredMessages([]);
   presetHidden = Boolean(state.currentAgent);
   applyTheme();
   applyPluginHeight();
@@ -236,7 +275,7 @@ function selectAgent(agent: Agent | null | undefined): void {
   clearParamOverrides();
   delete agent.chatId;
   state.currentAgent = agent;
-  state.messages = initialMessages(agent);
+  adoptStoredMessages(initialMessages(agent));
   presetHidden = false;
   state.error = '';
   state.historyOpen = false;
@@ -309,7 +348,9 @@ function updateAgent(agent: Agent, values: AgentFormValues): void {
     params,
   });
 
-  const incoming: Record<string, string | boolean> = {
+  // 键集被钉死成和 OPTIONAL_AGENT_FIELDS 一致：两边漏掉同一个字段才是无害的，
+  // 只漏这一边会往文档里写 undefined，只漏那一边则是改了也存不下去。
+  const incoming: Record<OptionalAgentField, string | boolean> = {
     autoPrefix: values.autoPrefix.trim(),
     status: values.status || '',
     callback: values.callback || '',
@@ -322,8 +363,11 @@ function updateAgent(agent: Agent, values: AgentFormValues): void {
     un_stream: Boolean(values.un_stream),
     isAiSummary: Boolean(values.isAiSummary),
   };
-  for (const [key, fallback] of Object.entries(OPTIONAL_AGENT_FIELDS)) {
-    if (key in agent || incoming[key] !== fallback) agent[key] = incoming[key];
+  // 按名字逐个写回。agent[key] 的 key 是联合类型，TS 会要求值同时是 string 和 boolean，
+  // 这里取一个宽松视图绕过去——键集和取值范围已经由 incoming 的类型兜住了。
+  const writable = agent as Record<OptionalAgentField, string | boolean>;
+  for (const key of OPTIONAL_AGENT_KEYS) {
+    if (key in agent || incoming[key] !== OPTIONAL_AGENT_FIELDS[key]) writable[key] = incoming[key];
     else delete agent[key];
   }
   const questions = clonePlain(values.quick_questions || []);
@@ -346,7 +390,7 @@ function deleteAgent(agent: Agent): void {
     return;
   }
   state.currentAgent = null;
-  state.messages = [];
+  adoptStoredMessages([]);
   presetHidden = false;
   state.error = '';
 }
@@ -360,7 +404,7 @@ function togglePin(agent: Agent): void {
 function newConversation(): void {
   stop();
   clearParamOverrides();
-  state.messages = [];
+  adoptStoredMessages([]);
   presetHidden = Boolean(state.currentAgent);
   if (state.currentAgent) state.currentAgent.chatId = `chat@${state.currentAgent._id}#${Date.now()}`;
 }
@@ -378,6 +422,7 @@ async function send(text: string, images: readonly string[] = []): Promise<boole
 async function sendContent(content: ChatMessage['content']): Promise<boolean> {
   if (!hasContent(content) || state.loading || !state.currentAgent) return false;
   state.messages.push({ role: 'user', content }, { role: 'assistant', content: '' });
+  touchMessages();
   const assistantMessage = state.messages.at(-1) as ChatMessage;
   const streamId = ++activeStream;
   state.loading = true;
@@ -424,6 +469,7 @@ function stop(): void {
 }
 
 function persistCurrentConversation(): void {
+  if (!unsavedMessages) return;
   if (!state.currentAgent || !state.messages.some((message) => message.role === 'user')) return;
   const id = state.currentAgent.chatId || `chat@${state.currentAgent._id}#${Date.now()}`;
   state.currentAgent.chatId = id;
@@ -435,17 +481,20 @@ function persistCurrentConversation(): void {
     messages: conversationMessages(),
     favorite: existing?.isFavorite,
   }));
+  unsavedMessages = false;
   sortAgents();
 }
 
-function openHistory(history: History): void {
+async function openHistory(history: History): Promise<void> {
   const agent = state.agents.find((item) => item._id === history.agentId);
   if (!agent) return;
   stop();
+  // 正文先读出来再换屏：中途换好友、留着上一条话题的消息在那儿晾着，看着就像点错了
+  const messages = await historyMessages(history._id);
   clearParamOverrides();
   state.currentAgent = agent;
   agent.chatId = history._id;
-  state.messages = history.messages[0]?.role === 'system' ? clonePlain(history.messages.slice(1)) : clonePlain(history.messages);
+  adoptStoredMessages(messages);
   presetHidden = false;
   state.error = '';
   state.historyOpen = false;
@@ -460,16 +509,17 @@ function deleteHistory(history: History): void {
 }
 
 function toggleFavorite(history: History): void {
+  // 只动收藏位，正文一个字都不用重写
   upsertHistory(saveHistory({
     id: history._id,
     title: history.title || '',
-    messages: history.messages,
     favorite: !history.isFavorite,
   }));
 }
 
 function deleteMessage(index: number): void {
   state.messages.splice(index, 1);
+  touchMessages();
   persistCurrentConversation();
 }
 
@@ -482,6 +532,7 @@ async function retryMessage(index: number): Promise<void> {
   const content = typeof original === 'string' ? original.trim() : original;
   if (!hasContent(content)) return;
   state.messages.splice(userIndex);
+  touchMessages();
   await sendContent(content);
 }
 
@@ -553,6 +604,10 @@ watch(() => state.messages.map((message) => message?.content), () => {
 });
 
 const agentHistories = computed(() => state.histories.filter((history) => history.agentId === state.currentAgent?._id));
+// 「还没配过线路」：uTools AI 不需要填任何东西，私有线路则地址和密钥一个都没有才算没配。
+// ChatView（整屏引导）和 ChatComposer（token 计数要不要显示）判断的是同一件事，
+// 以前两边各写了一遍一模一样的表达式。
+const needsApiSetup = computed(() => state.settings.provider !== 'utools' && !state.settings.apiKey && !state.settings.baseUrl);
 // 本次话题实际会用的模型：临时调参改过就显示改后的，界面上不能还停在好友自己的设置
 const activeModel = computed(() => paramOverrides.model || state.currentAgent?.params?.model || state.settings.model || '');
 
@@ -563,6 +618,7 @@ export function useChatStore() {
     agentHistories,
     routeModels,
     activeModel,
+    needsApiSetup,
     enterIntent,
     paramOverrides,
     setParamOverrides,
