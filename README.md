@@ -1,12 +1,10 @@
+# funchat
+
+把一屋子 AI 好友装进 uTools：多角色切换 · 话题回溯 · 一键导出 · 本地优先。
+
 <div align="center">
 
 <img src="public/logo.png" alt="funchat" width="88">
-
-# funchat
-
-**把一屋子 AI 好友装进 uTools。**
-
-多角色切换 · 话题回溯 · 一键导出 · 本地优先
 
 [![License](https://img.shields.io/github/license/farfarfun-utools/utools-funchat?color=0ca47f)](LICENSE)
 [![uTools](https://img.shields.io/badge/uTools-plugin-0ca47f)](https://u.tools)
