@@ -64,7 +64,9 @@
 
 ## 安装
 
-需要 [Node.js](https://nodejs.org) ≥ 20 与 [pnpm](https://pnpm.io) ≥ 12（`corepack enable` 即可，版本跟着 `package.json#packageManager` 走）。
+需要 [Node.js](https://nodejs.org) ≥ 22.10 与 [pnpm](https://pnpm.io) ≥ 12（`corepack enable` 即可，版本跟着 `package.json#packageManager` 走）。
+
+> 22.10 是测试工具链的硬下限：jsdom 30 依赖的 undici 8 用了 Node 22.10 才有的 `worker_threads.markAsUncloneable`，在更低版本上所有 jsdom 环境的测试一加载就炸。插件本身跑在 uTools 内置的 Chromium 里，和这个版本无关。
 
 ```bash
 git clone https://github.com/farfarfun-utools/utools-funchat.git

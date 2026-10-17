@@ -29,7 +29,12 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 这是跑测试工具链的 Node，不是插件运行时的 Node ——  插件跑在 uTools 内置的
+          # Chromium 里，拿什么版本构建都不影响产物。而工具链这边 22.10 是硬下限：
+          # jsdom 30 依赖 undici 8，后者直接用了 22.10 才有的
+          # worker_threads.markAsUncloneable，Node 20 上所有 jsdom 环境的测试文件
+          # 一加载就炸（markAsUncloneable is not a function）。
+          node-version: 22
           cache: pnpm
 
       # 这一条就是本地的那道门：install --frozen-lockfile → test → typecheck →
