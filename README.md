@@ -33,7 +33,7 @@
 | <img src="docs/screenshots/dark.png" alt="深色主题"> | |
 | 浅色 / 深色 / 跟随系统 | |
 
-> 图里的对话和配置都是为截图造的演示数据。
+> 图由 `pnpm screenshots` 生成，内容都是为截图造的演示数据，不含任何真实 API Key。
 
 ## 它能做什么
 
@@ -95,6 +95,7 @@ pnpm dev         # 浏览器预览，自带 uTools API 模拟层，数据存在 
 pnpm test        # 覆盖流式解析、存储层、会话状态机与数据兼容
 pnpm typecheck   # vue-tsc，含 .vue；uTools 接口名由 utools-api-types 校对
 pnpm lint:check  # 只报 error，不改文件
+pnpm screenshots # 重新生成 README 里的截图，没装 Chrome 会跳过
 ```
 
 > 别用 `pnpm lint` 做检查——它带 `--fix`，会把全仓 `.vue` 重排一遍，改动混在你的 diff 里。要检查就用 `pnpm lint:check`。
