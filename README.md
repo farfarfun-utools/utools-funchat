@@ -22,6 +22,19 @@
 
 每个「AI 好友」是一套独立的角色设定、模型参数和聊天记录。翻译官只管翻译，代码审查员只管挑刺，周报助理记得你上周写了什么。想换个人聊，`Shift + ↓` 就行。
 
+## 截图
+
+| | |
+| --- | --- |
+| <img src="docs/screenshots/chat.png" alt="聊天"> | <img src="docs/screenshots/market.png" alt="AI 市场"> |
+| 代码高亮、表格、LaTeX 公式都在本地渲染 | 内置 300 个角色，点一下「添加并开始」就能用 |
+| <img src="docs/screenshots/history.png" alt="话题记录"> | <img src="docs/screenshots/agent.png" alt="编辑好友"> |
+| 每个好友的话题独立存档，可收藏、可搜索 | 模型、角色指令、上下文长度、采样参数逐个可调 |
+| <img src="docs/screenshots/dark.png" alt="深色主题"> | |
+| 浅色 / 深色 / 跟随系统 | |
+
+> 图里的对话和配置都是为截图造的演示数据。
+
 ## 它能做什么
 
 | | |
