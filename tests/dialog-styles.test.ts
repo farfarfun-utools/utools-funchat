@@ -2,8 +2,12 @@ import { test } from 'vitest';
 import { strict as assert } from 'node:assert';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const SRC = new URL('../src', import.meta.url).pathname;
+// 必须走 fileURLToPath，不能图省事取 .pathname：Windows 上 file:// 的 pathname 是
+// `/D:/a/...`，前面那个斜杠让 Node 按「当前盘符下的绝对路径」解析，scandir 拿到的
+// 就成了 `D:\D:\a\...`，这条测试在三平台矩阵里只有 windows 作业会红。
+const SRC = fileURLToPath(new URL('../src', import.meta.url));
 
 function vueFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
