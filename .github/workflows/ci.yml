@@ -5,6 +5,17 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  # 允许手动触发，方便在改 CI 本身时验证。
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # 同一分支的新提交会取消上一次还在跑的流水线 —— 这里一次推送要占三个 runner，
+  # 连推几个提交不取消的话会堆成好几倍。
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -40,5 +51,11 @@ jobs:
       # 这一条就是本地的那道门：install --frozen-lockfile → test → typecheck →
       # lint:check → preload.js 语法 → 版本号一致 → build → 产物齐全。
       # 单独再列一遍脚本只会和 build.sh 慢慢不一致，所以直接跑它。
+      #
+      # 检查（test / typecheck / lint）只在 ubuntu 那一格跑。另两格要回答的问题是
+      # 「这个平台上装得上、构建得出来吗」—— 把同一套测试在最慢的两个 runner 上再跑
+      # 两遍不会多发现什么，只是让每次推送多等几分钟（macOS 还按 10 倍分钟数计费）。
       - name: Build gates
         run: sh build.sh
+        env:
+          SKIP_CHECKS: ${{ matrix.os == 'ubuntu-latest' && '0' || '1' }}

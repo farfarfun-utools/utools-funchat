@@ -22,12 +22,21 @@ if ! [ "$PNPM_MAJOR" -ge 12 ] 2>/dev/null; then
 fi
 
 pnpm install --frozen-lockfile
-pnpm test
-# 类型检查已经清零，纳入构建流程防止回归
-pnpm typecheck
-# eslint 的 error 也已清零，同样纳入。--quiet 只看 error：剩下的一千多条 warning 全是
-# .vue 的排版类（每行几个属性、单标签怎么闭合），封个数字没人会去维护。
-pnpm lint:check
+
+# CI 在 ubuntu 那一格已经跑过完整的检查了，mac / windows 两格只负责证明「这个平台上
+# 装得上、构建得出来」，再把同一套测试跑两遍只是让最慢的两个 runner 多等几分钟。
+# 本地直接 ./build.sh 时默认全跑：一条命令就该把该查的都查完。
+if [ "${SKIP_CHECKS:-0}" = "1" ]; then
+  echo "SKIP_CHECKS=1: 跳过 test / typecheck / lint"
+else
+  pnpm test
+  # 类型检查已经清零，纳入构建流程防止回归
+  pnpm typecheck
+  # eslint 的 error 也已清零，同样纳入。--quiet 只看 error：剩下的一千多条 warning 全是
+  # .vue 的排版类（每行几个属性、单标签怎么闭合），封个数字没人会去维护。
+  pnpm lint:check
+fi
+
 node --check "$PLUGIN_DIR/preload.js"
 # 版本号在 package.json 和 plugin.json 里各写一份：前者给工具链，后者是 uTools 判断「有没有
 # 新版」的唯一依据。漂移了不会有任何报错，只会表现成「发版了但用户收不到更新」，所以在这里卡住。
