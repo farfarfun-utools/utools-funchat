@@ -25,7 +25,7 @@ jobs:
       - name: Enable corepack
         run: corepack enable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           # 这是跑工具链的 Node，不是插件运行时的 —— 插件跑在 uTools 内置的 Chromium
           # 里，拿哪个版本构建都不影响产物。而工具链这边 22.10 是硬下限：jsdom 30 依赖
