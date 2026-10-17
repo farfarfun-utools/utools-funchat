@@ -1,4 +1,4 @@
-# funchat
+# 好友聊天 FunChat
 
 把一屋子 AI 好友装进 uTools：多角色切换 · 话题回溯 · 一键导出 · 本地优先。
 
