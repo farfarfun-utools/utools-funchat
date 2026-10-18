@@ -269,6 +269,31 @@ async function init(): Promise<void> {
   state.ready = true;
 }
 
+/**
+ * 整库被换掉之后（恢复备份）把界面重新对齐到磁盘上的数据。
+ *
+ * 和 refreshFromSync 的区别是「保不保住现场」：那边是别的设备同步过来几条文档，要尽量
+ * 不动用户正在看的东西；这边是脚下的数据整个换了一份，当前好友、当前话题、设置全都可能
+ * 已经不存在了，留着任何一样都是指向旧数据的悬空引用。所以这里是重走一遍 init 的加载部分
+ * —— 不含 registerHostEvents（官方要求只注册一次）和模型元信息（和数据无关）。
+ *
+ * 先 stop()：恢复的瞬间可能正有一条流式回复在写，它写完会往已经不存在的话题里落盘。
+ */
+async function reload(): Promise<void> {
+  stop();
+  clearParamOverrides();
+  state.settings = loadSettings();
+  state.agents = await loadAgents();
+  state.histories = await loadHistories();
+  sortAgents();
+  state.currentAgent = state.agents[0] || null;
+  adoptStoredMessages([]);
+  presetHidden = Boolean(state.currentAgent);
+  state.error = '';
+  applyTheme();
+  applyPluginHeight();
+}
+
 function selectAgent(agent: Agent | null | undefined): void {
   if (!agent) return;
   stop();
@@ -623,6 +648,7 @@ export function useChatStore() {
     paramOverrides,
     setParamOverrides,
     init,
+    reload,
     selectAgent,
     cycleAgent,
     addAgent,

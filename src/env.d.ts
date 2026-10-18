@@ -3,7 +3,11 @@ export {};
 declare global {
   // preload.js 往 window 上挂的桥接接口，官方声明里当然没有，要自己写。
   interface Window {
-    saveFile?: (options: unknown, data: unknown, encoding: string) => Promise<void>;
+    // 返回值是 preload 真正给的那个：写成功 true，用户在对话框里取消 false。
+    // 原来声明成 Promise<void>，于是「取消了没有」这件事在类型上根本看不见。
+    saveFile?: (options: unknown, data: unknown, encoding: string) => Promise<boolean>;
+    /** 读用户选的文本文件；用户取消时给 null。只有 uTools 里有，浏览器里退回 <input type="file">。 */
+    openTextFile?: (options?: unknown) => Promise<string | null>;
   }
 }
 

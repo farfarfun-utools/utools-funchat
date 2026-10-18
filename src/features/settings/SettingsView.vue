@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import { saveAgent } from '../../services/storage.js';
+import { applyBackup, backupFilename, buildBackup, parseBackup, serializeBackup } from '../../services/backup.js';
+import { downloadInBrowser } from '../chat/message-tools.js';
 import { useChatStore } from '../../stores/chat.js';
+import ConfirmDialog from '../../components/ConfirmDialog.vue';
 import ModelPickerDialog from '../chat/ModelPickerDialog.vue';
 
 const store = useChatStore();
@@ -41,6 +44,96 @@ function replaceModels() {
   }
   selectedAgents.value = [];
   targetModel.value = '';
+}
+
+const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
+const restoreInput = ref<HTMLInputElement>();
+const backupStatus = ref('');
+const backupBusy = ref(false);
+
+async function exportBackup() {
+  const agreed = await confirmDialog.value?.open({
+    title: '导出备份',
+    // 这里不能只说「内容为明文」：用户要掂量的是「这个文件丢了会怎样」，而答案是
+    // 别人可以拿你的密钥调用你的账号。
+    message: '备份包含好友、全部会话，以及 API 路线里的明文密钥——拿到文件的人可以用你的账号调用服务。请妥善保管。',
+    confirmText: '导出',
+  });
+  if (!agreed) return;
+
+  backupBusy.value = true;
+  try {
+    // 正在看的这段对话可能还没落盘（平时是退出插件时才写），不先存一下，导出的备份里
+    // 就缺了用户刚说完的那几句——而这恰恰是他最可能想保住的部分。
+    store.persistCurrentConversation();
+    const backup = buildBackup();
+    const filename = backupFilename();
+    const content = serializeBackup(backup);
+
+    // 不走 message-tools 的 saveToDisk：它把「用户在对话框里点了取消」和「这个环境压根
+    // 没有原生保存能力」都返回成 false，图片导出那边据此退回浏览器下载——放在这里就成了
+    // 「点了取消反而下载下来一份」。所以自己判断有没有桥接，取消就安静收场。
+    if (typeof window.saveFile === 'function') {
+      const saved = await window.saveFile({
+        title: '导出 FunChat 备份',
+        defaultPath: filename,
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      }, content, 'utf-8');
+      backupStatus.value = saved ? `已导出 ${backup.documents.length} 条数据` : '';
+      return;
+    }
+
+    const href = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
+    downloadInBrowser(filename, href);
+    URL.revokeObjectURL(href);
+    backupStatus.value = `已导出 ${backup.documents.length} 条数据`;
+  } finally {
+    backupBusy.value = false;
+  }
+}
+
+/** 走原生对话框；没有 preload（浏览器里调试）时退回 <input type="file">。 */
+async function chooseBackup() {
+  if (typeof window.openTextFile !== 'function') return restoreInput.value?.click();
+  const content = await window.openTextFile({ filters: [{ name: 'JSON', extensions: ['json'] }] });
+  if (typeof content === 'string') await restoreBackup(content);
+}
+
+async function readPickedFile(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  // 清空 value：同一个文件连选两次也要能触发 change
+  input.value = '';
+  if (file) await restoreBackup(await file.text());
+}
+
+async function restoreBackup(content: string) {
+  const parsed = parseBackup(content);
+  if (!parsed) {
+    backupStatus.value = '这份文件不是 FunChat 备份，或者格式比当前版本更新';
+    return;
+  }
+
+  const agreed = await confirmDialog.value?.open({
+    title: '恢复备份',
+    // 「整库替换」必须说在前面：当前这台机器上的密钥配置也会被备份里的那套顶掉，
+    // 默不作声地换掉用户正在用的线路，比恢复失败更糟。
+    message: `将用备份里的 ${parsed.backup.documents.length} 条数据替换当前全部好友、会话与设置（含 API 密钥），现有内容不再保留。`,
+    confirmText: '替换',
+  });
+  if (!agreed) return;
+
+  backupBusy.value = true;
+  try {
+    const { documents, failed } = applyBackup(parsed.backup);
+    await store.reload();
+    const skipped = parsed.dropped + failed;
+    backupStatus.value = skipped
+      ? `已恢复 ${documents} 条数据，跳过 ${skipped} 条无法识别的`
+      : `已恢复 ${documents} 条数据`;
+  } finally {
+    backupBusy.value = false;
+  }
 }
 </script>
 
@@ -87,8 +180,26 @@ function replaceModels() {
       </div>
     </section>
 
+    <section class="reference-card backup-card">
+      <div class="reference-label">数据备份</div>
+      <div class="reference-body backup-body">
+        <div class="backup-actions">
+          <button type="button" :disabled="backupBusy" @click="exportBackup"><i class="iconfont icon-download" aria-hidden="true"></i>导出备份</button>
+          <button type="button" :disabled="backupBusy" @click="chooseBackup"><i class="iconfont icon-file" aria-hidden="true"></i>恢复备份</button>
+          <span v-if="backupStatus" class="backup-status">{{ backupStatus }}</span>
+        </div>
+        <div class="instructions">
+          <p>备份内容：全部好友、全部会话（含消息里的图片）、以及设置和 API 路线。</p>
+          <p><b>备份文件内含明文 API 密钥</b>，等同于凭据，请妥善保管、不要分享。</p>
+          <p>恢复是整库替换：会用备份里的内容顶掉当前的好友、会话和设置，现有内容不再保留。</p>
+        </div>
+        <input ref="restoreInput" type="file" accept="application/json,.json" hidden @change="readPickedFile">
+      </div>
+    </section>
+
   </main>
 
+  <ConfirmDialog ref="confirmDialog" />
   <ModelPickerDialog ref="picker" />
 </template>
 
@@ -145,6 +256,13 @@ function replaceModels() {
 .replace-button i { margin-right: 8px; color: #fff; }
 .reference-settings .instructions { height: 101px; margin-top: 12px; color: var(--color-text-3); }
 .reference-settings .instructions p { height: 25px; margin: 0; }
+.backup-card { flex-direction: row; }
+.backup-actions { height: 32px; display: flex; align-items: center; gap: 12px; }
+.backup-actions button { height: 32px; padding: 0 15px; border-radius: 12px; color: #fff; background: var(--color-primary); }
+.backup-actions button:disabled { opacity: .6; }
+.backup-actions button i { margin-right: 8px; color: #fff; }
+.backup-status { color: var(--color-text-3); font-size: 12px; }
+.backup-body .instructions { height: auto; }
 @media (max-width: 720px) {
   .reference-settings { padding: 12px; }
   .reference-card { min-width: 650px; padding: 24px; }

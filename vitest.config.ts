@@ -7,6 +7,9 @@ import viteConfig from './vite.config.ts';
 export default mergeConfig(viteConfig, defineConfig({
   test: {
     environment: 'node',
+    // 只做一件事：给 jsdom 补上 <dialog> 的 show / showModal / close。
+    // node 环境的用例里它是空操作，见文件里的注释。
+    setupFiles: ['tests/dialog.setup.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,vue}'],
