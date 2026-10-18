@@ -136,33 +136,54 @@ export function parseBackup(text: string): ParsedBackup | null {
  * 语义本来就是「回到那一刻」。所以先把三类文档清掉再写入 —— 界面上必须先问过用户。
  *
  * @param backup 已经过 parseBackup 校验的备份。
- * @returns 写入成功的文档数，以及写失败的条数（失败不该静默，界面要报出来）。
+ * @returns 写入成功的文档数；失败时会尝试恢复原库并抛错。
  */
-export function applyBackup(backup: Backup): { documents: number; failed: number } {
-  for (const prefix of BACKUP_PREFIXES) {
-    for (const document of host.db.allDocs(prefix)) host.db.remove(document);
-  }
-
-  let documents = 0;
-  let failed = 0;
-  for (const source of backup.documents) {
+export function applyBackup(backup: Backup): { documents: number } {
+  const previous = BACKUP_PREFIXES.flatMap((prefix) => host.db.allDocs(prefix));
+  const previousSettings = clonePlain(loadSettings());
+  const write = (source: StorageDocument): void => {
     const document = clonePlain(source);
     delete document._rev;
     let result = host.db.put(document);
-    // 上面刚清过库，正常不会撞 _rev 冲突；但备份里可能有重复 _id（手工拼过的文件），
-    // 第二条就会撞上。取当前修订号重试一次，而不是把这条数据悄悄丢掉。
-    if (result?.error) {
+    if (!result?.ok) {
       const current = host.db.get(document._id);
-      result = current ? host.db.put({ ...document, _rev: current._rev }) : result;
+      if (current) result = host.db.put({ ...document, _rev: current._rev });
     }
-    if (result?.error) failed += 1;
-    else documents += 1;
-  }
+    if (!result?.ok) throw new Error(`写入 ${document._id} 失败：${result?.message || result?.name || '未知错误'}`);
+  };
+  const clear = (): void => {
+    for (const prefix of BACKUP_PREFIXES) {
+      for (const document of host.db.allDocs(prefix)) {
+        const result = host.db.remove(document);
+        if (!result?.ok) throw new Error(`删除 ${document._id} 失败：${result?.message || result?.name || '未知错误'}`);
+      }
+    }
+  };
 
-  // 设置放最后写：万一上面中途抛了，至少不会出现「密钥已经换成备份里的、而会话还是旧的」
-  // 这种半截状态 —— 那种状态下用户下一句话就会发到另一个服务商那里去。
-  saveSettings(backup.settings);
-  return { documents, failed };
+  const encoder = new TextEncoder();
+  if (encoder.encode(JSON.stringify(backup.settings)).length > 1024 * 1024 - 8192) {
+    throw new Error('备份中的设置超出数据库单条 1MB 上限');
+  }
+  for (const document of backup.documents) {
+    if (encoder.encode(JSON.stringify(document)).length > 1024 * 1024 - 8192) {
+      throw new Error(`备份中的 ${document._id} 超出数据库单条 1MB 上限`);
+    }
+  }
+  try {
+    clear();
+    for (const document of backup.documents) write(document);
+    saveSettings(backup.settings);
+  } catch (error) {
+    try {
+      clear();
+      for (const document of previous) write(document);
+      saveSettings(previousSettings);
+    } catch (rollbackError) {
+      throw new Error(`恢复备份失败，原数据也未能完整恢复：${String(rollbackError)}`, { cause: error });
+    }
+    throw error;
+  }
+  return { documents: backup.documents.length };
 }
 
 /**

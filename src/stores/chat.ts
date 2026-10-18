@@ -62,6 +62,7 @@ const state = reactive<AppState>({
   settings: loadSettings(),
   loading: false,
   error: '',
+  saveError: '',
   historyOpen: false,
   sidebarCollapsed: false,
   view: 'chat',
@@ -257,6 +258,7 @@ async function init(): Promise<void> {
   sortAgents();
   state.currentAgent = state.agents[0] || null;
   adoptStoredMessages([]);
+  state.saveError = '';
   presetHidden = Boolean(state.currentAgent);
   applyTheme();
   applyPluginHeight();
@@ -280,7 +282,7 @@ async function init(): Promise<void> {
  * 先 stop()：恢复的瞬间可能正有一条流式回复在写，它写完会往已经不存在的话题里落盘。
  */
 async function reload(): Promise<void> {
-  stop();
+  stop(false);
   clearParamOverrides();
   state.settings = loadSettings();
   state.agents = await loadAgents();
@@ -288,6 +290,7 @@ async function reload(): Promise<void> {
   sortAgents();
   state.currentAgent = state.agents[0] || null;
   adoptStoredMessages([]);
+  state.saveError = '';
   presetHidden = Boolean(state.currentAgent);
   state.error = '';
   applyTheme();
@@ -296,7 +299,7 @@ async function reload(): Promise<void> {
 
 function selectAgent(agent: Agent | null | undefined): void {
   if (!agent) return;
-  stop();
+  if (!stop()) return;
   clearParamOverrides();
   delete agent.chatId;
   state.currentAgent = agent;
@@ -427,7 +430,7 @@ function togglePin(agent: Agent): void {
 }
 
 function newConversation(): void {
-  stop();
+  if (!stop()) return;
   clearParamOverrides();
   adoptStoredMessages([]);
   presetHidden = Boolean(state.currentAgent);
@@ -482,38 +485,45 @@ async function sendContent(content: ChatMessage['content']): Promise<boolean> {
   return true;
 }
 
-function stop(): void {
-  if (!state.loading && !abortController) return;
+function stop(persist = true): boolean {
+  if (!state.loading && !abortController) return persist ? persistCurrentConversation() : true;
   activeStream += 1;
   abortController?.abort();
   abortController = null;
   state.loading = false;
   const last = state.messages.at(-1);
   if (last?.role === 'assistant' && !messageText(last)) removeMessage(last);
-  persistCurrentConversation();
+  return persist ? persistCurrentConversation() : true;
 }
 
-function persistCurrentConversation(): void {
-  if (!unsavedMessages) return;
-  if (!state.currentAgent || !state.messages.some((message) => message.role === 'user')) return;
+function persistCurrentConversation(): boolean {
+  if (!unsavedMessages) return true;
+  if (!state.currentAgent || !state.messages.some((message) => message.role === 'user')) return true;
   const id = state.currentAgent.chatId || `chat@${state.currentAgent._id}#${Date.now()}`;
   state.currentAgent.chatId = id;
   const firstUser = state.messages.find((message) => message.role === 'user');
   const existing = state.histories.find((history) => history._id === id);
-  upsertHistory(saveHistory({
-    id,
-    title: Array.from(messageText(firstUser)).slice(0, 20).join('') || '新话题',
-    messages: conversationMessages(),
-    favorite: existing?.isFavorite,
-  }));
+  try {
+    upsertHistory(saveHistory({
+      id,
+      title: Array.from(messageText(firstUser)).slice(0, 20).join('') || '新话题',
+      messages: conversationMessages(),
+      favorite: existing?.isFavorite,
+    }));
+  } catch (error) {
+    state.saveError = error instanceof Error ? error.message : '会话保存失败';
+    return false;
+  }
+  state.saveError = '';
   unsavedMessages = false;
   sortAgents();
+  return true;
 }
 
 async function openHistory(history: History): Promise<void> {
   const agent = state.agents.find((item) => item._id === history.agentId);
   if (!agent) return;
-  stop();
+  if (!stop()) return;
   // 正文先读出来再换屏：中途换好友、留着上一条话题的消息在那儿晾着，看着就像点错了
   const messages = await historyMessages(history._id);
   clearParamOverrides();
@@ -657,7 +667,7 @@ export function useChatStore() {
     togglePin,
     newConversation,
     send,
-    stop,
+    stop: () => stop(),
     persistCurrentConversation,
     openHistory,
     deleteHistory,

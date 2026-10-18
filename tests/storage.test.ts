@@ -200,6 +200,20 @@ test('saveHistory keeps working when the topic was written behind its back', () 
   assert.equal(host.db.get('chat@ai@1#1000').title, '新标题');
 });
 
+test('a failed body write does not report the conversation as saved', () => {
+  resetDatabase();
+  const original = host.db.put;
+  host.db.put = (document) => document._id.startsWith('chatbody@')
+    ? { error: true, message: 'disk full' }
+    : original(document);
+  try {
+    assert.throws(() => saveHistory({ id: 'chat@ai@1#1000', title: '话题', messages: [{ role: 'user', content: '你好' }] }), /disk full/);
+    assert.equal(host.db.get('chat@ai@1#1000'), null);
+  } finally {
+    host.db.put = original;
+  }
+});
+
 /* ---------- 0.1.x 单键存储的搬迁 ---------- */
 
 function stageLegacyBlob(documents) {
@@ -241,4 +255,17 @@ test('migration skips documents the document db already has', async () => {
   saveAgent(makeAgent('ai@1', { nickname: '新好友' }));
   const agents = await loadAgents();
   assert.deepEqual(agents.map((agent) => agent.nickname), ['新好友']);
+});
+
+test('migration retries on the next launch after a rejected write', async () => {
+  stageLegacyBlob([{ _id: 'ai@1', nickname: '旧好友' }]);
+  const original = host.db.put;
+  host.db.put = () => ({ error: true, message: 'disk full' });
+  try {
+    await assert.rejects(() => loadAgents(), /disk full/);
+    assert.equal(host.dbStorage.getItem(MIGRATED_KEY), null);
+  } finally {
+    host.db.put = original;
+  }
+  assert.equal((await loadAgents())[0].nickname, '旧好友');
 });

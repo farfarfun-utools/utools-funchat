@@ -407,6 +407,29 @@ test('a redundant save on plugin exit does not rewrite the stored conversation',
   assert.equal(host.db.get(chatId)._rev, before, '消息没变就不该再整文档写一遍');
 });
 
+test('a failed save keeps the conversation open until a retry succeeds', async () => {
+  await setup({ agents: 2 });
+  host.ai = replyWith('好的');
+  const currentId = store.state.currentAgent._id;
+  const original = host.db.put;
+  host.db.put = (document) => document._id.startsWith('chatbody@')
+    ? { error: true, message: 'disk full' }
+    : original(document);
+  try {
+    await store.send('你好');
+    assert.match(store.state.saveError, /disk full/);
+    store.newConversation();
+    assert.equal(store.state.messages[0].content, '你好');
+    store.selectAgent(store.state.agents.find((agent) => agent._id !== currentId));
+    assert.equal(store.state.currentAgent._id, currentId);
+  } finally {
+    host.db.put = original;
+  }
+  store.newConversation();
+  assert.equal(store.state.saveError, '');
+  assert.deepEqual(store.state.messages, []);
+});
+
 test('selecting an agent with a sample dialog does not create a history on its own', async () => {
   await setup();
   host.db.put({

@@ -126,6 +126,7 @@ watch(() => [store.state.currentAgent?._id, store.state.currentAgent?.chatId], a
         <ChatExportMenu />
       </div>
     </header>
+    <div v-if="store.state.saveError" class="save-error" role="alert">会话未保存：{{ store.state.saveError }}</div>
     <!-- 包一层定位容器：输入区带图时会变高，按钮按「消息区底部」定位才不会被压住 -->
     <div class="messages-area">
       <button v-if="!stick" class="back-to-bottom" type="button" title="回到底部" @click="scrollToBottom">
@@ -164,6 +165,7 @@ watch(() => [store.state.currentAgent?._id, store.state.currentAgent?.chatId], a
 
 <style scoped>
 .chat-view { position: relative; min-width: 0; height: 100vh; display: flex; flex: 1; flex-direction: column; background: var(--chat-bg); }
+.save-error { padding: 7px 16px; color: #b42318; background: #fff1ef; font-size: 12px; }
 .chat-header { height: 56px; padding: 0 12px 0 16px; display: flex; flex: 0 0 56px; align-items: center; gap: 10px; border-bottom: 1px solid var(--color-border-2); background: var(--color-bg-2); }
 .header-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .header-text b { color: var(--color-text-1); font-size: 14px; font-weight: 600; line-height: 1.2; }

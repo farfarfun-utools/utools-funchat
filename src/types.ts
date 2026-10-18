@@ -182,6 +182,7 @@ export type AppState = {
   settings: Settings;
   loading: boolean;
   error: string;
+  saveError: string;
   historyOpen: boolean;
   sidebarCollapsed: boolean;
   view: AppView;

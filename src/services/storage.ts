@@ -26,12 +26,13 @@ export type { ApiRoute, Settings, HistoryInput } from '../types.ts';
 // 这里不再兜一层 clonePlain——两个调用方本来就各自克隆过一遍，再克隆就是白拷一次带图会话。
 function putDocument(document: StorageDocument): DbResult {
   const result = host.db.put(document);
-  if (!result?.error) return result;
+  if (result?.ok) return result;
   // _rev 过期说明同一条文档在别处被写过（例如先 saveHistory 再 saveAgent 走了同一个对象）。
   // 取回当前 _rev 重试一次，让本次改动生效，而不是把失败咽下去。
   const current = host.db.get(document._id);
-  if (!current) return result;
-  return host.db.put({ ...document, _rev: current._rev });
+  const retried = current ? host.db.put({ ...document, _rev: current._rev }) : result;
+  if (!retried?.ok) throw new Error(`保存失败：${retried?.message || retried?.name || '未知错误'}`);
+  return retried;
 }
 
 function removeDocument(id: string): void {
@@ -56,7 +57,7 @@ function migrateLegacyDocuments(): void {
       if (!source?._id || host.db.get(source._id)) continue;
       const document = clonePlain(source);
       delete document._rev;
-      host.db.put(document);
+      putDocument(document);
     }
   }
   // 标记写在搬完之后。写在前面的话，中途抛异常或被用户关掉插件，剩下的会话就再也搬不过来了
@@ -77,10 +78,11 @@ export async function loadAgents(): Promise<Agent[]> {
     const response = await fetch('./data/agents.json');
     if (!response.ok) throw new Error('无法加载初始好友数据');
     const seed: StorageDocument[] = await response.json();
-    await Promise.all(seed.map((source) => {
+    await Promise.all(seed.map(async (source) => {
       const document = clonePlain(source);
       delete document._rev;
-      return host.db.promises.put(document);
+      const result = await host.db.promises.put(document);
+      if (!result?.ok) throw new Error(`初始化好友失败：${result?.message || result?.name || '未知错误'}`);
     }));
     documents = await host.db.promises.allDocs('ai@');
   }

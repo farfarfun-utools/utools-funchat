@@ -69,8 +69,7 @@ test('round-trips the whole库 through serialize → parse → apply', async () 
   const parsed = parseBackup(text);
   assert.ok(parsed, '自己导出的备份应当认得');
   assert.equal(parsed.dropped, 0);
-  const { documents, failed } = applyBackup(parsed.backup);
-  assert.equal(failed, 0);
+  const { documents } = applyBackup(parsed.backup);
   assert.equal(documents, parsed.backup.documents.length);
 
   assert.equal(host.db.get('ai@1')?.nickname, '小助手');
@@ -133,10 +132,37 @@ test('survives duplicate _id in a hand-edited backup', () => {
   assert.ok(parsed);
 
   // 第二条会撞 _rev 冲突。重试一次写进去，而不是静默丢掉或整个恢复失败。
-  const { documents, failed } = applyBackup(parsed.backup);
-  assert.equal(failed, 0);
+  const { documents } = applyBackup(parsed.backup);
   assert.equal(documents, 2);
   assert.equal(host.db.get('ai@1')?.nickname, '第二次');
+});
+
+test('restoring a backup rolls back when a document write fails', () => {
+  seed();
+  const before = buildBackup();
+  const original = host.db.put;
+  let rejected = false;
+  host.db.put = (document) => {
+    if (!rejected && document._id === 'ai@new') {
+      rejected = true;
+      return { error: true, message: 'disk full' };
+    }
+    return original(document);
+  };
+  try {
+    assert.throws(() => applyBackup({ ...before, documents: [{ _id: 'ai@new', nickname: '新好友' }] }), /disk full/);
+  } finally {
+    host.db.put = original;
+  }
+  assert.equal(host.db.get('ai@new'), null);
+  assert.deepEqual(buildBackup().documents, before.documents);
+  assert.equal(loadSettings().apiRoutes?.[0]?.apiKey, 'sk-secret-123');
+});
+
+test('oversized backup documents are rejected before deleting current data', () => {
+  seed();
+  assert.throws(() => applyBackup({ ...buildBackup(), documents: [{ _id: 'ai@big', text: 'x'.repeat(1024 * 1024) }] }), /1MB/);
+  assert.equal(host.db.get('ai@1')?.nickname, '小助手');
 });
 
 test('names the file by local date, not UTC', () => {

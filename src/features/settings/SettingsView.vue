@@ -125,12 +125,14 @@ async function restoreBackup(content: string) {
 
   backupBusy.value = true;
   try {
-    const { documents, failed } = applyBackup(parsed.backup);
+    const { documents } = applyBackup(parsed.backup);
     await store.reload();
-    const skipped = parsed.dropped + failed;
+    const skipped = parsed.dropped;
     backupStatus.value = skipped
       ? `已恢复 ${documents} 条数据，跳过 ${skipped} 条无法识别的`
       : `已恢复 ${documents} 条数据`;
+  } catch (error) {
+    backupStatus.value = error instanceof Error ? error.message : '恢复备份失败';
   } finally {
     backupBusy.value = false;
   }
