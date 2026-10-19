@@ -4,7 +4,7 @@
 
 <div align="center">
 
-<img src="public/logo.png" alt="funchat" width="88">
+<img src="https://raw.githubusercontent.com/farfarfun/.github/master/brand/png/mark/funchat-128.png" alt="funchat" width="88">
 
 [![License](https://img.shields.io/github/license/farfarfun-utools/utools-funchat?color=0ca47f)](LICENSE)
 [![uTools](https://img.shields.io/badge/uTools-plugin-0ca47f)](https://u.tools)
