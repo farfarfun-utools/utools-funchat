@@ -18,7 +18,7 @@ jobs:
         shell: bash
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 和 ci.yml 一样走 corepack：pnpm 版本跟着 package.json#packageManager 走，
       # 和 build.sh 的下限检查是同一套，不在这儿再钉一个数字。
