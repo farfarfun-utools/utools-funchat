@@ -43,5 +43,7 @@
   "engines": {
     "node": ">=22.22.2",
     "pnpm": ">=12"
-  }
+  },
+  "description": "言来语往 FunChat：多角色 AI 对话，支持角色市场、话题回溯与一键导出；会话和配置保存在本地",
+  "homepage": "https://farfarfun.github.io/packages/utools-funchat/"
 }

@@ -149,7 +149,7 @@ function openUrl(url: string) {
   <main v-else class="feature-view help-view">
     <div class="help-row">
       <section>
-        <h2>funchat 是什么</h2>
+        <h2>言来语往 FunChat 是什么</h2>
         <p>一款运行在 uTools 里的多角色 AI 对话插件。把常用模型、角色设定、历史会话和内容导出集中在一个桌面工作区，适合持续对话、提示词调试和内容整理。</p>
         <ul class="help-points">
           <li>多 AI 好友：为每个角色保存独立设定与上下文，随时切换</li>
@@ -196,7 +196,7 @@ function openUrl(url: string) {
       <h2>关于 farfarfun</h2>
       <p>
         <button class="inline-link" type="button" @click="openUrl(ORG_URL)">github.com/farfarfun</button>
-        是一个专注实用小工具与 AI 应用的开源组织，funchat 是其中之一。
+        是一个专注实用小工具与 AI 应用的开源组织，言来语往 FunChat 是其中之一。
         如果这个插件帮到了你，欢迎给仓库点个 Star —— 那是我们判断该往哪个方向继续投入的主要依据。
         也欢迎直接提 PR，无论是修 bug、补角色，还是改进界面。
       </p>

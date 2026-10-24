@@ -78,7 +78,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="!store.state.ready" class="app-loading"><img :src="logoUrl" alt=""><span>funchat</span></div>
+  <div v-if="!store.state.ready" class="app-loading"><img :src="logoUrl" alt=""><span>言来语往</span></div>
   <div v-else class="app-shell">
     <div v-if="store.state.error && !store.state.agents.length" class="fatal-error" role="alert">{{ store.state.error }}</div>
     <SideMenu v-if="store.state.view !== 'chat' || !store.state.sidebarCollapsed"

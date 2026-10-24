@@ -1,7 +1,7 @@
 {
-  "pluginName": "好友聊天 FunChat",
+  "pluginName": "言来语往",
   "version": "0.1.1",
-  "description": "把一屋子 AI 好友装进 uTools：多角色切换、话题回溯、一键导出，数据全在本地",
+  "description": "言来语往 FunChat：多角色 AI 对话，支持角色市场、话题回溯与一键导出；会话和配置保存在本地",
   "author": "farfarfun",
   "main": "dist/index.html",
   "preload": "preload.js",
@@ -13,10 +13,11 @@
   "features": [
     {
       "code": "funchat",
-      "explain": "打开 funchat",
-      "description": "打开 funchat",
+      "explain": "打开言来语往 FunChat",
+      "description": "打开言来语往 FunChat",
       "icon": "logo.png",
       "cmds": [
+        "言来语往",
         "funchat",
         "Funchat",
         "聊天助手",

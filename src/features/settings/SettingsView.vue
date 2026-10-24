@@ -75,7 +75,7 @@ async function exportBackup() {
     // 「点了取消反而下载下来一份」。所以自己判断有没有桥接，取消就安静收场。
     if (typeof window.saveFile === 'function') {
       const saved = await window.saveFile({
-        title: '导出 FunChat 备份',
+        title: '导出言来语往 FunChat 备份',
         defaultPath: filename,
         filters: [{ name: 'JSON', extensions: ['json'] }],
       }, content, 'utf-8');
