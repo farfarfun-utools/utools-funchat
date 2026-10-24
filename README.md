@@ -79,6 +79,8 @@ sh build.sh
 
 在 uTools 中打开「插件应用市场 → 开发者工具 → 新建项目」，选择 `utools/plugin.json` 导入即可。
 
+在 uTools 主输入框输入 `AI`、`funchat`、`Funchat` 或 `聊天助手` 打开聊天；选中文字也可通过「问 AI 好友」进入。功能指令共 5 条。
+
 ## 首次配置
 
 打开插件后，在输入框上方点 🔑 图标：
