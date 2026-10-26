@@ -118,6 +118,7 @@ defineExpose({ open });
       </section>
 
       <section v-else class="dialog-pane advanced-pane">
+        <label class="form-row"><span>超级面板</span><span class="advanced-control"><span class="panel-toggle"><span class="switch"><input v-model="form.superPanel" type="checkbox" role="switch" aria-label="显示在超级面板"><i></i></span><span>显示在超级面板</span></span><small>选中文字后点击此角色，将开启新话题并自动发送给当前配置的 AI 服务。</small></span></label>
         <label class="form-row question-row"><span>提问示例</span><span class="control tag-input"><span v-for="(item, index) in form.quick_questions" :key="`${item}-${index}`" class="question-tag">{{ item }}<button type="button" aria-label="删除提问示例" @click="form.quick_questions.splice(index, 1)">×</button></span><input v-model="question" placeholder="请输入问题示例，按回车添加" @keydown.enter.prevent="addQuestion"></span></label>
         <div class="form-row stream-row"><span>非流输出</span><div class="advanced-control"><div><span class="switch"><input v-model="form.un_stream" type="checkbox" role="switch"><i></i></span><small>启用后该Ai将会一次性输出结果。(等待时间较长-不建议)</small></div><small>某些对话模型如果不支持流式输出，可开启该功能。</small></div></div>
       </section>
@@ -177,6 +178,8 @@ defineExpose({ open });
 .switch i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: transform .2s ease; }
 .switch input:checked + i { background: var(--color-primary); }
 .switch input:checked + i::after { transform: translateX(12px); }
+.switch input:focus-visible + i { outline: 2px solid var(--color-primary); outline-offset: 3px; }
+.panel-toggle { min-height: 24px; display: flex; align-items: center; gap: 10px; }
 /* 各分页的高度基准按行数配平，切换分页时弹窗不会跳动。删减表单行时记得一起下调。 */
 .basic-pane { min-height: 484px; transform: translateY(-.765625px); }
 .basic-pane.function-pane { min-height: 384px; }

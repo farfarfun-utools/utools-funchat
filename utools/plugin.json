@@ -33,7 +33,7 @@
         {
           "type": "over",
           "label": "问 AI 好友",
-          "maxLength": 4000
+          "maxLength": 100000
         }
       ]
     }

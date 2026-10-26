@@ -55,6 +55,7 @@ export type Agent = Record<string, unknown> & {
   contextLength?: number;
   params?: AgentParams;
   autoPrefix?: string;
+  superPanel?: boolean;
   quick_questions?: string[];
   is_top?: boolean;
   created_at?: string;
@@ -154,6 +155,7 @@ export type AgentFormValues = Record<string, unknown> & {
   callback: string;
   isAiSummary: boolean;
   autoPrefix: string;
+  superPanel: boolean;
   isFly: boolean;
   isOverall: boolean;
   isFlyNewChat: boolean;

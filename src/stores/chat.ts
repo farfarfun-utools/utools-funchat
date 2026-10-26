@@ -36,6 +36,7 @@ import type {
 // 否则「打开设置再保存」会凭空给文档加字段（见 tests/agent-compat.test.ts）。
 const OPTIONAL_AGENT_FIELDS = {
   autoPrefix: '',
+  superPanel: false,
   status: '',
   callback: '',
   api_id: '',
@@ -182,8 +183,29 @@ function applyPluginHeight(): void {
 
 // 进入插件时的输入意图。seq 每次进入都 +1，输入框靠它聚焦；text 是匹配命令带进来的
 // 选中文字（plugin.json 里的 over 类型指令），没有就是空串。
-// 预填而不直接发送：用户还得有机会挑好友、改措辞。
+// 通用入口只预填；角色专属入口在发送前清掉预填，避免输入框再次出现已发送的文字。
 const enterIntent = ref({ seq: 0, text: '' });
+const AGENT_FEATURE_PREFIX = 'funchat-agent-';
+
+function syncAgentFeatures(): void {
+  try {
+    const enabled = state.agents.filter((agent) => agent.superPanel === true);
+    const codes = new Set(enabled.map((agent) => `${AGENT_FEATURE_PREFIX}${agent._id}`));
+    for (const feature of host.getFeatures()) {
+      if (feature.code.startsWith(AGENT_FEATURE_PREFIX) && !codes.has(feature.code)) host.removeFeature(feature.code);
+    }
+    for (const agent of enabled) {
+      host.setFeature({
+        code: `${AGENT_FEATURE_PREFIX}${agent._id}`,
+        description: `用${agent.nickname}处理选中文字`,
+        icon: 'logo.png',
+        cmds: [{ type: 'over', label: agent.nickname, minLength: 1, maxLength: 100_000 }],
+      });
+    }
+  } catch (error) {
+    state.error = `超级面板入口更新失败：${error instanceof Error ? error.message : String(error)}`;
+  }
+}
 
 // 只有 over（划词）带进来的 payload 才是用户想问的内容。敲关键字进来时 type 是 text、
 // payload 是关键字本身（"funchat"），照着预填会往输入框里塞一句莫名的 "funchat"。
@@ -212,13 +234,30 @@ async function refreshFromSync(): Promise<void> {
   // 话题在别处被删掉的情况不动屏幕——正看着的内容不该凭空消失。
   const opened = chatId ? state.histories.find((item) => item._id === chatId) : undefined;
   if (opened && opened._rev !== openRev) adoptStoredMessages(await historyMessages(opened._id));
+  syncAgentFeatures();
 }
 
 function registerHostEvents(): void {
   // 以前一次都没注册过 onPluginEnter，于是「唤出 uTools → 敲 funchat → 回车 → 直接打字」
   // 中间凭空多了一次点击输入框；匹配命令（选中文字直接提问）更是无从实现。
-  host.onPluginEnter?.((action) => {
-    enterIntent.value = { seq: enterIntent.value.seq + 1, text: intentTextOf(action) };
+  host.onPluginEnter?.(async (action) => {
+    const text = intentTextOf(action);
+    const roleEntry = action.code.startsWith(AGENT_FEATURE_PREFIX);
+    enterIntent.value = { seq: enterIntent.value.seq + 1, text: roleEntry ? '' : text };
+    if (!roleEntry || !text.trim()) return;
+    state.view = 'chat';
+    const agent = state.agents.find((item) => `${AGENT_FEATURE_PREFIX}${item._id}` === action.code && item.superPanel === true);
+    if (!agent) {
+      state.error = '此角色已删除或关闭超级面板入口，请重新选择。';
+      return;
+    }
+    if (state.loading) {
+      state.error = '正在生成回复，请等待完成或停止后，再从超级面板选择角色。';
+      return;
+    }
+    if (!selectAgent(agent)) return;
+    newConversation();
+    await send(text);
   });
   // uTools 退出插件默认是「转后台」（isKill=false），不会触发 pagehide，
   // 流式回复途中退出整轮问答就丢了。和 App.vue 里的 pagehide 两头都挂上。
@@ -267,6 +306,7 @@ async function init(): Promise<void> {
   // 模型吃不吃图片。拉不到也不影响聊天，不该让它挡住首屏。
   void loadUtoolsModelInfo();
   // 官方文档：每个插件应用只需注册一次事件监听。init 只在 App 挂载时调用一次。
+  syncAgentFeatures();
   registerHostEvents();
   state.ready = true;
 }
@@ -295,11 +335,11 @@ async function reload(): Promise<void> {
   state.error = '';
   applyTheme();
   applyPluginHeight();
+  syncAgentFeatures();
 }
 
-function selectAgent(agent: Agent | null | undefined): void {
-  if (!agent) return;
-  if (!stop()) return;
+function selectAgent(agent: Agent | null | undefined): boolean {
+  if (!agent || !stop()) return false;
   clearParamOverrides();
   delete agent.chatId;
   state.currentAgent = agent;
@@ -308,6 +348,7 @@ function selectAgent(agent: Agent | null | undefined): void {
   state.error = '';
   state.historyOpen = false;
   state.view = 'chat';
+  return true;
 }
 
 function cycleAgent(step: number): void {
@@ -326,6 +367,7 @@ function addAgent(values: AgentFormValues): void {
     avatar: clonePlain(values.avatar) || { type: 'icon', icon: 'icon-a1', color: '#0ca47f', text: nickname.slice(0, 1) },
     contextLength: Number(values.contextLength) || 16,
     autoPrefix: values.autoPrefix.trim(),
+    superPanel: Boolean(values.superPanel),
     isFly: Boolean(values.isFly),
     isOverall: Boolean(values.isOverall),
     isFlyNewChat: values.isFlyNewChat !== false,
@@ -353,6 +395,7 @@ function addAgent(values: AgentFormValues): void {
   state.agents.push(agent);
   sortAgents();
   selectAgent(agent);
+  syncAgentFeatures();
 }
 
 function updateAgent(agent: Agent, values: AgentFormValues): void {
@@ -380,6 +423,7 @@ function updateAgent(agent: Agent, values: AgentFormValues): void {
   // 只漏这一边会往文档里写 undefined，只漏那一边则是改了也存不下去。
   const incoming: Record<OptionalAgentField, string | boolean> = {
     autoPrefix: values.autoPrefix.trim(),
+    superPanel: Boolean(values.superPanel),
     status: values.status || '',
     callback: values.callback || '',
     api_id: values.api_id || '',
@@ -403,6 +447,7 @@ function updateAgent(agent: Agent, values: AgentFormValues): void {
   else delete agent.quick_questions;
 
   saveAgent(agent);
+  syncAgentFeatures();
 }
 
 function deleteAgent(agent: Agent): void {
@@ -410,6 +455,7 @@ function deleteAgent(agent: Agent): void {
   if (index < 0) return;
   removeAgent(agent._id);
   state.agents.splice(index, 1);
+  syncAgentFeatures();
   dropHistories((history) => history.agentId === agent._id);
   if (state.currentAgent?._id !== agent._id) return;
   const next = state.agents[Math.max(0, index - 1)];

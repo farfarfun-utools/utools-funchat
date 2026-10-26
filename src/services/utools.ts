@@ -50,6 +50,7 @@ type AlwaysApi = Pick<typeof utools,
   | 'copyText' | 'copyImage' | 'shellOpenExternal'
   | 'getUser' | 'getPath' | 'showSaveDialog' | 'outPlugin'
   | 'onPluginEnter' | 'onPluginOut' | 'onPluginDetach' | 'onDbPull'
+  | 'getFeatures' | 'setFeature' | 'removeFeature'
 >;
 
 // 可能缺席的接口：AI 能力要看客户端版本和用户是否开通，setExpandHeight 是 8.0 才有的名字。
@@ -136,6 +137,7 @@ function createBrowserDb(storage: WebStorage): UtoolsDb {
 
 function createBrowserUtools(): UtoolsHost {
   const storage = createWebStorage();
+  const features = new Map<string, Parameters<typeof utools.setFeature>[0]>();
 
   return {
     db: createBrowserDb(storage),
@@ -151,6 +153,9 @@ function createBrowserUtools(): UtoolsHost {
     onPluginDetach: () => {},
     // 浏览器里没有同步机制，注册了也永远不会回调；留着只为让调用点不必判空
     onDbPull: () => {},
+    getFeatures: (codes) => [...features.values()].filter((feature) => !codes || codes.includes(feature.code)).map(clonePlain),
+    setFeature: (feature) => { features.set(feature.code, clonePlain(feature)); },
+    removeFeature: (code) => features.delete(code),
     // 浏览器预览里「退出插件」无处可退，什么都不做比关掉标签页更不碍事
     outPlugin: () => {},
     setExpandHeight: () => true,
