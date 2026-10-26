@@ -10,6 +10,11 @@ import { host } from './services/utools.js';
 
 const store = useChatStore();
 const logoUrl = `${import.meta.env.BASE_URL}logo.png`;
+const compactWindow = globalThis.matchMedia?.('(max-width: 720px)');
+
+function fitSidebar() {
+  if (compactWindow?.matches) store.state.sidebarCollapsed = true;
+}
 
 // Esc 逐层后退，最后一层才退出插件。上面每一层浮层（输入框的浮层、导出菜单、好友右键菜单）
 // 自己接住 Esc 后都会 preventDefault，所以到这里的一定是「没有浮层可关了」。
@@ -62,6 +67,8 @@ function persistBeforeUnload() {
 }
 
 onMounted(async () => {
+  fitSidebar();
+  compactWindow?.addEventListener('change', fitSidebar);
   document.addEventListener('keydown', handleShortcut);
   window.addEventListener('pagehide', persistBeforeUnload);
   try {
@@ -72,6 +79,7 @@ onMounted(async () => {
   }
 });
 onBeforeUnmount(() => {
+  compactWindow?.removeEventListener('change', fitSidebar);
   document.removeEventListener('keydown', handleShortcut);
   window.removeEventListener('pagehide', persistBeforeUnload);
 });
@@ -81,8 +89,7 @@ onBeforeUnmount(() => {
   <div v-if="!store.state.ready" class="app-loading"><img :src="logoUrl" alt=""><span>言来语往</span></div>
   <div v-else class="app-shell">
     <div v-if="store.state.error && !store.state.agents.length" class="fatal-error" role="alert">{{ store.state.error }}</div>
-    <SideMenu v-if="store.state.view !== 'chat' || !store.state.sidebarCollapsed"
-      :active="store.state.view" @navigate="store.state.view = $event" />
+    <SideMenu :active="store.state.view" @navigate="store.state.view = $event" />
     <Transition name="page" mode="out-in">
       <div class="view-pane" :key="store.state.view">
         <template v-if="store.state.view === 'chat'">

@@ -77,7 +77,6 @@ defineExpose({ open });
     <form method="dialog" @submit.prevent="submit">
       <div class="avatar-editor">
         <AgentAvatar :agent="previewAgent" :size="78" />
-        <span class="avatar-edit" aria-hidden="true"><i class="iconfont icon-edit"></i></span>
       </div>
 
       <nav class="dialog-tabs" aria-label="好友设置分类">
@@ -120,7 +119,7 @@ defineExpose({ open });
       <section v-else class="dialog-pane advanced-pane">
         <label class="form-row"><span>超级面板</span><span class="advanced-control"><span class="panel-toggle"><span class="switch"><input v-model="form.superPanel" type="checkbox" role="switch" aria-label="显示在超级面板"><i></i></span><span>显示在超级面板</span></span><small>选中文字后点击此角色，将开启新话题并自动发送给当前配置的 AI 服务。</small></span></label>
         <label class="form-row question-row"><span>提问示例</span><span class="control tag-input"><span v-for="(item, index) in form.quick_questions" :key="`${item}-${index}`" class="question-tag">{{ item }}<button type="button" aria-label="删除提问示例" @click="form.quick_questions.splice(index, 1)">×</button></span><input v-model="question" placeholder="请输入问题示例，按回车添加" @keydown.enter.prevent="addQuestion"></span></label>
-        <div class="form-row stream-row"><span>非流输出</span><div class="advanced-control"><div><span class="switch"><input v-model="form.un_stream" type="checkbox" role="switch"><i></i></span><small>启用后该Ai将会一次性输出结果。(等待时间较长-不建议)</small></div><small>某些对话模型如果不支持流式输出，可开启该功能。</small></div></div>
+        <label class="form-row stream-row"><span>非流输出</span><span class="advanced-control"><span class="panel-toggle"><span class="switch"><input v-model="form.un_stream" type="checkbox" role="switch" aria-label="非流输出"><i></i></span><small>启用后一次性显示完整回复，等待时间较长。</small></span><small>模型不支持流式输出时，可开启此功能。</small></span></label>
       </section>
 
       <footer><button type="button" @click="dialog.close()">取消</button><button class="primary" type="submit">保存</button></footer>
@@ -131,28 +130,26 @@ defineExpose({ open });
 </template>
 
 <style scoped>
-.agent-dialog { width: 560px; max-width: calc(100vw - 24px); max-height: calc(100dvh - 20px); margin: auto; padding: 24px 32px 32px; overflow: visible; border: 0; border-radius: 12px; color: var(--color-text-2); background: var(--color-bg-3); line-height: 22px; transform: translateY(15px); }
+.agent-dialog { width: 560px; max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); margin: auto; padding: 0; overflow: hidden; border: 0; border-radius: 12px; color: var(--color-text-2); background: var(--color-bg-3); line-height: 22px; }
 .agent-dialog::backdrop { background: rgba(29, 33, 41, .6); }
-.agent-dialog.function-dialog { transform: translateY(16.5px); }
 .agent-dialog:focus { outline: 0; }
-.agent-dialog form { position: relative; padding-top: 25px; }
-.avatar-editor { position: absolute; z-index: 1; top: -60px; left: 50%; width: 78px; height: 78px; transform: translateX(-50%); }
-.avatar-edit { position: absolute; right: 0; bottom: 0; width: 20px; height: 20px; display: grid; place-items: center; border: 2px solid var(--color-bg-3); border-radius: 50%; color: var(--color-text-3); background: var(--color-fill-1); }
-.avatar-edit i { font-size: 11px; }
-.dialog-tabs { height: 50px; padding: 0 16px; display: flex; align-items: flex-end; gap: 32px; border-bottom: 1px solid var(--color-border-2); }
+.agent-dialog form { max-height: calc(100dvh - 24px); display: flex; flex-direction: column; }
+/* 头像和操作区留在滚动区外，避免短窗口把头像上沿和保存按钮裁掉。 */
+.avatar-editor { width: 78px; height: 78px; margin: 20px auto 8px; flex: 0 0 auto; }
+.dialog-tabs { min-height: 44px; margin: 0 24px; display: flex; flex: 0 0 auto; align-items: flex-end; gap: 32px; border-bottom: 1px solid var(--color-border-2); }
 .dialog-tabs button { position: relative; height: 40px; padding: 8px 0; color: var(--color-text-1); line-height: 22px; }
 .dialog-tabs button:focus-visible { outline-offset: -2px; }
 .dialog-tabs button.active { color: var(--color-primary); font-weight: 500; }
 .dialog-tabs button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--color-primary); }
-.dialog-pane { width: 100%; padding-top: 16px; }
+.dialog-pane { width: 100%; min-height: 0; padding: 16px 24px 0; overflow-y: auto; overscroll-behavior: contain; }
 .form-row { min-height: 32px; margin-bottom: 20px; display: flex; align-items: flex-start; }
 .form-row > span:first-child { width: 90px; flex: 0 0 90px; padding-top: 5px; }
 .form-row.required > span:first-child::after { content: " *"; color: #f53f3f; }
 .control, .form-row > input { position: relative; min-width: 0; flex: 1; }
-.form-row > input, .control > input, .control > textarea, .control > select { width: 100%; border: 1px solid transparent; outline: 0; color: var(--color-text-2); background: var(--color-fill-2); }
-.form-row > input, .control > input, .control > select { height: 32px; padding: 0 12px; border-radius: 12px; font: inherit; }
+.form-row > input, .control > input, .control > textarea, .control > select, .model-input > input { width: 100%; border: 1px solid transparent; outline: 0; color: var(--color-text-2); background: var(--color-fill-2); }
+.form-row > input, .control > input, .control > select, .model-input > input { height: 32px; padding: 0 12px; border-radius: 12px; font: inherit; }
 .control > textarea { height: 54px; min-height: 54px; padding: 4px 12px; border-radius: 12px; resize: none; line-height: 22px; }
-.form-row > input:focus, .control > input:focus, .control > textarea:focus, .control > select:focus { border-color: var(--color-primary); background: var(--color-bg-2); }
+.form-row > input:focus, .control > input:focus, .control > textarea:focus, .control > select:focus, .model-input > input:focus { border-color: var(--color-primary); background: var(--color-bg-2); }
 .control small { display: block; color: var(--color-text-3); font-size: 12px; line-height: 19px; }
 .control small b, .radios b { color: var(--color-primary); font-weight: 400; }
 .model-row { margin-bottom: 20px; }
@@ -165,7 +162,7 @@ defineExpose({ open });
 .model-browse .iconfont { font-size: 14px; }
 .type-row { margin-bottom: 20px; align-items: center; }
 .type-row > span:first-child { padding-top: 0; }
-.radios { display: flex; align-items: center; gap: 24px; }
+.radios { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 24px; }
 .radios label { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
 .radios input { width: 14px; height: 14px; margin: 0; accent-color: var(--color-primary); }
 .textarea-row { margin-bottom: 20px; }
@@ -180,28 +177,25 @@ defineExpose({ open });
 .switch input:checked + i::after { transform: translateX(12px); }
 .switch input:focus-visible + i { outline: 2px solid var(--color-primary); outline-offset: 3px; }
 .panel-toggle { min-height: 24px; display: flex; align-items: center; gap: 10px; }
-/* 各分页的高度基准按行数配平，切换分页时弹窗不会跳动。删减表单行时记得一起下调。 */
-.basic-pane { min-height: 484px; transform: translateY(-.765625px); }
-.basic-pane.function-pane { min-height: 384px; }
-.params-pane { min-height: 302px; padding: 16px 12px 0; }
 .params-pane p { margin-left: 90px; color: var(--color-text-3); font-size: 12px; }
-.advanced-pane { min-height: 135px; padding: 16px 12px 0; }
 .advanced-pane .form-row { margin-bottom: 12px; }
 .advanced-pane .form-row > span:first-child { width: 90px; flex-basis: 90px; }
-.tag-input { min-height: 32px; padding: 0 12px; display: flex; align-items: center; gap: 4px; overflow: hidden; border-radius: 12px; background: var(--color-fill-2); }
+.tag-input { min-height: 32px; padding: 6px 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; border-radius: 12px; background: var(--color-fill-2); }
 .tag-input input { min-width: 100px; padding: 0; flex: 1; background: transparent; }
-.question-tag { padding: 0 6px; border-radius: 3px; background: var(--color-primary-light-1); white-space: nowrap; }
-.question-tag button { margin-left: 4px; }
+.question-tag { max-width: 100%; padding: 0 6px; display: inline-flex; align-items: baseline; border-radius: 3px; background: var(--color-primary-light-1); overflow-wrap: anywhere; }
+.question-tag button { margin-left: 4px; flex: 0 0 auto; }
 .advanced-control { min-width: 0; flex: 1; }
-.advanced-control > div { height: 24px; display: flex; align-items: center; gap: 10px; }
 .advanced-control > small { display: block; color: var(--color-text-3); font-size: 12px; line-height: 19px; }
-.advanced-control div > small { color: var(--color-text-3); font-size: 12px; }
+.panel-toggle > small { color: var(--color-text-3); font-size: 12px; }
 .stream-row { margin-bottom: 0 !important; }
-.agent-dialog footer { height: 32px; margin-top: 20px; display: flex; align-items: center; justify-content: center; gap: 12px; }
+.agent-dialog footer { padding: 16px 24px; display: flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 12px; border-top: 1px solid var(--color-border-2); }
 .agent-dialog footer button { height: 32px; padding: 0 15px; border: 1px solid transparent; border-radius: 12px; background: var(--color-fill-2); }
 .agent-dialog footer .primary { color: #fff; background: var(--color-primary); }
-@media (max-height: 860px) {
-  .agent-dialog { overflow-y: auto; }
-  .avatar-editor { top: -50px; }
+@media (max-width: 480px) {
+  .dialog-tabs { margin: 0 16px; gap: 24px; }
+  .dialog-pane { padding-right: 16px; padding-left: 16px; }
+  .form-row > span:first-child, .advanced-pane .form-row > span:first-child { width: 72px; flex-basis: 72px; }
+  .model-browse { padding: 0 8px; }
+  .panel-toggle { align-items: flex-start; }
 }
 </style>

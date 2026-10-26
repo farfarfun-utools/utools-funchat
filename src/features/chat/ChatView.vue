@@ -168,7 +168,7 @@ watch(() => [store.state.currentAgent?._id, store.state.currentAgent?.chatId], a
 .save-error { padding: 7px 16px; color: #b42318; background: #fff1ef; font-size: 12px; }
 .chat-header { height: 56px; padding: 0 12px 0 16px; display: flex; flex: 0 0 56px; align-items: center; gap: 10px; border-bottom: 1px solid var(--color-border-2); background: var(--color-bg-2); }
 .header-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.header-text b { color: var(--color-text-1); font-size: 14px; font-weight: 600; line-height: 1.2; }
+.header-text b { overflow: hidden; color: var(--color-text-1); font-size: 14px; font-weight: 600; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 .header-text small { display: flex; align-items: center; gap: 6px; overflow: hidden; color: var(--color-text-3); font-size: 12px; line-height: 1.2; white-space: nowrap; }
 /* 话题名可能很长，让它独占伸缩空间并省略，模型名和 token 数始终可见 */
 .header-text small > span { flex: 0 0 auto; }
@@ -179,7 +179,7 @@ watch(() => [store.state.currentAgent?._id, store.state.currentAgent?.chatId], a
 .header-actions > button:hover { color: var(--color-primary); background: var(--color-fill-1); }
 .header-actions .iconfont { font-size: 17px; line-height: 1; }
 .messages-area { position: relative; min-height: 0; display: flex; flex: 1; }
-.messages { flex: 1; overflow-y: auto; scrollbar-width: none; scroll-behavior: smooth; will-change: transform; }
+.messages { min-width: 0; flex: 1; overflow-y: auto; scrollbar-width: none; scroll-behavior: smooth; will-change: transform; }
 .back-to-bottom { position: absolute; z-index: 20; bottom: 12px; left: 50%; width: 32px; height: 32px; display: grid; place-items: center; transform: translateX(-50%); border: 1px solid var(--color-border-2); border-radius: 50%; color: var(--color-text-2); background: var(--color-bg-2); box-shadow: 0 2px 8px #00000024; }
 .back-to-bottom:hover { color: var(--color-primary); border-color: var(--color-primary); }
 @media (prefers-reduced-motion: reduce) { .messages { scroll-behavior: auto; } }
@@ -192,10 +192,10 @@ watch(() => [store.state.currentAgent?._id, store.state.currentAgent?.chatId], a
    所以导出、查找、滚动位置都不受影响；contain-intrinsic-size 的 auto 会记住它上次的真实
    高度，首次用 120px 占位，滚动条长度不至于来回跳。出图时整段都要量真实布局，故除外。 */
 .messages-content:not(.capturing) > :deep(.chat-box-item) { content-visibility: auto; contain-intrinsic-size: auto 120px; }
-.api-setup-wrap { margin: 40px 52px 0; }
-.api-setup-card { position: relative; height: 337px; padding: 110px 32px 32px; border-radius: 12px; background: var(--color-bg-5); }
+.api-setup-wrap { margin: 40px clamp(16px, 5vw, 52px) 20px; }
+.api-setup-card { position: relative; padding: 52px 24px 24px; border-radius: 12px; background: var(--color-bg-5); }
 .setup-avatar { position: absolute; top: -26px; left: calc(50% - 30px); }
-.api-setup-card h1 { position: absolute; top: 53px; right: 0; left: 0; color: var(--color-text-2); font-size: 20px; font-weight: 700; line-height: 23px; text-align: center; }
+.api-setup-card h1 { margin-bottom: 24px; color: var(--color-text-2); font-size: 18px; font-weight: 700; line-height: 1.5; text-align: center; }
 .api-setup-card h1 button { margin-right: 8px; color: #3b82f6; font-weight: inherit; text-decoration: underline; }
 .setup-field { display: block; margin-right: 1px; margin-bottom: 20px; margin-left: 1px; color: var(--color-text-2); line-height: 22px; }
 .setup-field:first-of-type { margin-bottom: 22px; }
@@ -206,7 +206,7 @@ watch(() => [store.state.currentAgent?._id, store.state.currentAgent?.chatId], a
 .setup-tips { margin-top: 12px; color: var(--color-text-3); font-size: 12px; line-height: 19.2px; }
 .setup-tips i { display: inline; color: var(--color-primary); font-size: 14px; }
 .quick-questions { margin: -18px 20px 30px 66px; display: flex; flex-wrap: wrap; gap: 8px; }
-.quick-questions button { height: 30px; padding: 0 14px; border: 1px solid var(--color-border-2); border-radius: 15px; color: var(--color-text-2); background: var(--color-bg-2); font-size: 13px; }
+.quick-questions button { max-width: 100%; min-height: 30px; padding: 4px 14px; border: 1px solid var(--color-border-2); border-radius: 15px; color: var(--color-text-2); background: var(--color-bg-2); font-size: 13px; overflow-wrap: anywhere; }
 .quick-questions button:hover:not(:disabled) { color: var(--color-primary); border-color: var(--color-primary); }
 .quick-questions button:disabled { opacity: .5; }
 .typing { width: 62px; height: 34px; margin: -18px 0 18px 66px; display: flex; align-items: center; justify-content: center; gap: 4px; border-radius: 3px 14px 14px; background: var(--color-bg-3); }

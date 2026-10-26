@@ -215,11 +215,11 @@ async function restoreBackup(content: string) {
 .reference-card { width: 100%; margin-bottom: 12px; padding: 32px; display: flex; border-radius: 12px; background: var(--color-bg-3); }
 .reference-label { width: 120px; flex: 0 0 120px; color: var(--color-text-2); }
 .reference-body { min-width: 0; flex: 1; }
-.preference-card { height: 159px; flex-direction: column; }
+.preference-card { flex-direction: column; }
 .setting-row { display: flex; }
-.height-row { height: 58px; margin-bottom: 12px; }
+.height-row { margin-bottom: 12px; }
 .height-control { height: 32px; display: flex; align-items: center; gap: 20px; }
-.height-control input[type="range"] { height: 18px; min-width: 200px; flex: 1; appearance: none; background: transparent; }
+.height-control input[type="range"] { height: 18px; min-width: 0; flex: 1; appearance: none; background: transparent; }
 .height-control input[type="range"]::-webkit-slider-runnable-track { height: 2px; border-radius: 1px; background: linear-gradient(to right, var(--color-primary) 0 38%, var(--color-border-2) 38% 100%); }
 .height-control input[type="range"]::-webkit-slider-thumb { width: 12px; height: 12px; margin-top: -5px; appearance: none; border: 2px solid var(--color-primary); border-radius: 50%; background: var(--color-bg-2); }
 .height-number { width: 80px; height: 32px; padding: 0 12px; border: 0; border-radius: 3px; outline: 0; color: var(--color-text-2); background: var(--color-fill-2); font-weight: 400; text-align: center; }
@@ -227,17 +227,14 @@ async function restoreBackup(content: string) {
 .reference-body small { color: var(--color-text-3); font-size: 12px; }
 .inline-body { display: flex; align-items: center; }
 .inline-body small { margin-left: 8px; }
-.model-card { height: 571px; }
-.model-body { height: 507px; }
-.model-transfer { width: 520px; height: 350px; display: flex; }
-.reference-settings .transfer-view { width: 260px; height: 350px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--color-border-2); border-radius: 4px 0 0 4px; }
+.model-transfer { width: 100%; height: 350px; display: flex; }
+.reference-settings .transfer-view { min-width: 0; flex: 1; height: 350px; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--color-border-2); border-radius: 4px 0 0 4px; }
 .reference-settings .transfer-view + .transfer-view { border-left: 0; border-radius: 0 4px 4px 0; }
 .reference-settings .transfer-view header { height: 42px; padding: 0 10px; display: flex; flex: 0 0 42px; align-items: center; background: var(--color-fill-1); }
 .reference-settings .transfer-view header b { flex: 1; font-size: 14px; font-weight: 500; }
 .reference-settings .transfer-view header span { margin-right: 8px; color: var(--color-text-3); font-size: 12px; }
 .reference-settings .transfer-view header button { width: 20px; height: 28px; color: var(--color-icon); }
 .reference-settings .source-view header span { margin-right: 2px; }
-.reference-settings .target-view header b { flex: 0 0 136px; }
 .reference-settings .target-view header button { margin-left: auto; }
 .model-search, .target-model { position: relative; height: 50px; padding: 0 10px 14px; display: flex; flex: 0 0 50px; align-items: flex-start; background: var(--color-fill-1); }
 .model-search { position: relative; }
@@ -249,17 +246,17 @@ async function restoreBackup(content: string) {
 .reference-settings .transfer-list { flex: 1; overflow-y: auto; }
 .reference-settings .transfer-list { scrollbar-width: none; }
 .reference-settings .transfer-list::-webkit-scrollbar { width: 0; height: 0; }
-.reference-settings .transfer-list button { width: 100%; height: 36px; padding: 0 10px; color: var(--color-text-2); line-height: 36px; text-align: left; }
+.reference-settings .transfer-list button { width: 100%; height: 36px; padding: 0 10px; overflow: hidden; color: var(--color-text-2); line-height: 36px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .reference-settings .transfer-list button:hover { color: var(--color-text-1); background: var(--color-fill-2); }
 .transfer-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--color-text-3); }
 .transfer-empty svg { width: 48px; height: 48px; color: #a9aeb8; }
 .transfer-empty span { margin-top: 4px; }
-.replace-button { width: 530px; height: 32px; margin-top: 12px; border-radius: 12px; color: #fff; background: var(--color-primary); }
+.replace-button { width: 100%; min-height: 32px; margin-top: 12px; border-radius: 12px; color: #fff; background: var(--color-primary); }
 .replace-button i { margin-right: 8px; color: #fff; }
-.reference-settings .instructions { height: 101px; margin-top: 12px; color: var(--color-text-3); }
-.reference-settings .instructions p { height: 25px; margin: 0; }
+.reference-settings .instructions { margin-top: 12px; color: var(--color-text-3); overflow-wrap: anywhere; }
+.reference-settings .instructions p { margin: 0; }
 .backup-card { flex-direction: row; }
-.backup-actions { height: 32px; display: flex; align-items: center; gap: 12px; }
+.backup-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .backup-actions button { height: 32px; padding: 0 15px; border-radius: 12px; color: #fff; background: var(--color-primary); }
 .backup-actions button:disabled { opacity: .6; }
 .backup-actions button i { margin-right: 8px; color: #fff; }
@@ -267,6 +264,13 @@ async function restoreBackup(content: string) {
 .backup-body .instructions { height: auto; }
 @media (max-width: 720px) {
   .reference-settings { padding: 12px; }
-  .reference-card { min-width: 650px; padding: 24px; }
+  .reference-card { padding: 20px; flex-direction: column; gap: 12px; }
+  .setting-row { flex-direction: column; gap: 8px; }
+  .reference-label { width: auto; flex-basis: auto; font-weight: 500; }
+}
+@media (max-width: 480px) {
+  .model-transfer { height: auto; flex-direction: column; gap: 12px; }
+  .reference-settings .transfer-view { height: 240px; flex: 0 0 240px; border-radius: 4px; }
+  .reference-settings .transfer-view + .transfer-view { border: 1px solid var(--color-border-2); border-radius: 4px; }
 }
 </style>

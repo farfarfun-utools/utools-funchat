@@ -180,7 +180,7 @@ function saveParams() {
           </span>
           <span v-if="route.id === store.state.settings.activeRouteId" class="route-badge">使用中</span>
         </button>
-        <p v-if="!routes.length" class="route-empty">还没有线路，右侧填一条</p>
+        <p v-if="!routes.length" class="route-empty">还没有线路，先添加一条</p>
         <button type="button" class="route-add" @click="addRoute">＋ 新增线路</button>
       </aside>
 
@@ -266,14 +266,14 @@ function saveParams() {
 </template>
 
 <style scoped>
-.chat-popover { position: absolute; z-index: 80; right: 0; bottom: calc(var(--composer-height, 160px) - 1px); color: var(--color-text-2); background: var(--color-bg-2); border: 1px solid var(--color-border-2); border-radius: 8px 0 0 8px; box-shadow: 0 4px 10px #0000001a; line-height: 22px; }
-.api-popover { width: 620px; height: 378px; padding-bottom: 12px; }
-.api-tabs { height: 44px; padding: 0 8px; display: flex; align-items: stretch; border-bottom: 1px solid var(--color-border-2); }
+.chat-popover { position: absolute; z-index: 80; right: 0; bottom: calc(var(--composer-height, 160px) - 1px); max-width: 100%; max-height: calc(100dvh - var(--composer-height, 160px) - 12px); color: var(--color-text-2); background: var(--color-bg-2); border: 1px solid var(--color-border-2); border-radius: 8px 0 0 8px; box-shadow: 0 4px 10px #0000001a; line-height: 22px; }
+.api-popover { width: 620px; height: 378px; display: flex; flex-direction: column; }
+.api-tabs { height: 44px; padding: 0 8px; display: flex; flex: 0 0 44px; align-items: stretch; border-bottom: 1px solid var(--color-border-2); }
 .api-tabs button { position: relative; height: 40px; margin: 0 10px; color: var(--color-text-1); }
 .api-tabs button.active { color: var(--color-primary); }
 .api-tabs button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--color-primary); }
 
-.route-layout { height: 322px; display: flex; }
+.route-layout { min-height: 0; display: flex; flex: 1; }
 .route-list { width: 176px; padding: 10px 8px; display: flex; flex-direction: column; gap: 4px; flex: 0 0 176px; overflow-y: auto; border-right: 1px solid var(--color-border-2); }
 .route-item { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 8px; text-align: left; }
 .route-item:hover { background: var(--color-fill-1); }
@@ -296,7 +296,7 @@ function saveParams() {
 /* 输入 + 下方提示竖排，取代原来给提示做绝对定位、再给整行留 32px 的做法 */
 .field-stack { min-width: 0; display: flex; flex: 1; flex-direction: column; gap: 4px; }
 .field-stack > small { color: var(--color-text-3); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
-.models-buttons { display: flex; align-items: center; gap: 8px; }
+.models-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .models-error { color: #f53f3f; }
 .form-row { min-height: 32px; margin-bottom: 14px; display: flex; align-items: flex-start; gap: 10px; }
 .form-row > span:first-child { padding-top: 6px; }
@@ -307,9 +307,10 @@ function saveParams() {
 .pull-models .iconfont { font-size: 14px; }
 .pull-models .spinning { animation: pull-spin .9s linear infinite; }
 @keyframes pull-spin { to { transform: rotate(360deg); } }
-.form-row > span:first-child { width: 62px; flex: 0 0 62px; text-align: right; }
+.form-row > span:first-child { width: 62px; flex: 0 0 62px; text-align: right; white-space: nowrap; }
 .form-row.required > span:first-child::before { content: "*"; margin-right: 3px; color: #f53f3f; }
-.form-row > input, .field-stack > input, .select-control { min-width: 0; height: 32px; padding: 0 13px; flex: 1 0 auto; border: 1px solid transparent; border-radius: 12px; outline: 0; background: var(--color-fill-2); }
+.form-row > input, .field-stack > input, .select-control { min-width: 0; height: 32px; padding: 0 13px; flex: 1; border: 1px solid transparent; border-radius: 12px; outline: 0; background: var(--color-fill-2); }
+.field-stack > input { width: 100%; flex: 0 0 32px; }
 .form-row > input:focus, .field-stack > input:focus, .select-control:focus-within { border-color: var(--color-primary); background: var(--color-bg-2); }
 .select-control { position: relative; padding: 0; }
 .select-control select { width: 100%; height: 30px; padding: 0 34px 0 13px; appearance: none; border: 0; outline: 0; color: inherit; background: transparent; }
@@ -324,8 +325,8 @@ function saveParams() {
 .service-notice > p:first-child { padding: 12px; border-radius: 12px; background: var(--color-primary-light-1); }
 .service-notice h3 { margin: 16px 0 4px; font-size: 14px; }
 
-.params-popover { width: 552px; height: 394px; padding: 14px 16px 16px; }
-.params-popover header { height: 34px; display: flex; align-items: flex-start; }
+.params-popover { width: 552px; padding: 14px 16px 16px; overflow-y: auto; overscroll-behavior: contain; }
+.params-popover header { min-height: 34px; margin-bottom: 8px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; }
 .params-popover header b { color: var(--color-text-1); font-weight: 500; }
 .params-popover header small { margin-left: 8px; color: #f759ab; font-size: 12px; }
 .params-popover header span { margin-left: auto; color: var(--color-text-3); font-size: 12px; }
@@ -340,4 +341,15 @@ function saveParams() {
 .model-browse:hover { color: var(--color-primary); border-color: var(--color-primary); }
 .model-browse .iconfont { font-size: 14px; }
 .model-control > small { display: block; margin-top: 6px; color: var(--color-text-3); font-size: 12px; }
+@media (max-width: 600px) {
+  .api-popover { height: 460px; }
+  .route-layout { flex-direction: column; }
+  .route-list { width: 100%; max-height: 100px; flex: 0 0 auto; border-right: 0; border-bottom: 1px solid var(--color-border-2); }
+  .api-form { min-height: 0; padding: 12px; }
+  .form-row { gap: 6px; }
+  .model-row { flex-direction: column; gap: 6px; }
+  .model-row > b { width: auto; text-align: left; }
+  .model-control { width: 100%; margin-left: 0; }
+  .model-browse { padding: 0 8px; }
+}
 </style>

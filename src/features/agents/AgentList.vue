@@ -24,8 +24,9 @@ const filteredAgents = computed(() => {
 const historyResults = computed(() => filterHistoryRecords(store.state.histories, query.value, 12));
 
 function selectAgent(agent: Agent) {
-  store.selectAgent(agent);
+  if (!store.selectAgent(agent)) return;
   query.value = '';
+  if (window.innerWidth <= 720) store.state.sidebarCollapsed = true;
 }
 
 function selectHistory(history: History) {
@@ -100,6 +101,7 @@ function deleteFromMenu() {
     </div>
     <div class="agents-scroll">
       <article v-for="agent in filteredAgents" :key="agent._id" class="agent-item" tabindex="0" role="button"
+        :title="agent.nickname" :aria-label="agent.nickname"
         :aria-current="store.state.currentAgent?._id === agent._id ? 'true' : undefined"
         :class="{ active: store.state.currentAgent?._id === agent._id }" @click="selectAgent(agent)"
         @keydown.enter.prevent="selectAgent(agent)" @keydown.space.prevent="selectAgent(agent)"
@@ -200,6 +202,10 @@ function deleteFromMenu() {
 .search-results b { color: var(--color-text-1); font-size: 13px; font-weight: 500; }
 .search-results small, .search-results p { color: var(--color-text-3); font-size: 11px; }
 .search-results p { padding: 20px 8px; text-align: center; }
+@media (max-width: 720px) {
+  .agent-list { position: absolute; z-index: 40; inset: 0 auto 0 0; }
+  .agent-list:not(.collapsed) { box-shadow: 4px 0 12px #0002; }
+}
 </style>
 
 <style>

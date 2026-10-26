@@ -220,7 +220,7 @@ function openUrl(url: string) {
 .market-tabs button:hover { background: var(--color-fill-1); }
 .market-tabs button.active { color: #fff; background: var(--color-primary); font-weight: 500; }
 .market-tabs button.active:hover { background: var(--color-primary); }
-.market-grid { width: 80%; margin: 0 auto; padding: 20px 0 24px; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.market-grid { width: 80%; margin: 0 auto; padding: 20px 0 24px; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 16px; }
 .market-card { position: relative; padding: 16px; display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 4px 12px; border: 1px solid var(--color-border-2); border-radius: 12px; background: var(--color-bg-2); }
 .market-card:hover { border-color: var(--color-primary); box-shadow: 0 4px 10px #0000000f; }
 .market-copy { min-width: 0; display: flex; flex-direction: column; justify-content: center; }
@@ -275,4 +275,15 @@ kbd { min-width: 28px; padding: 2px 8px; display: inline-block; border: 1px soli
 .support p { margin: 0; }
 .support .thanks { margin-top: 12px; color: var(--color-text-3); font-size: 12px; }
 .inline-link { display: inline; color: var(--color-primary); font-weight: 500; text-decoration: underline; }
+@media (max-width: 720px) {
+  .market-toolbar, .market-tabs, .market-grid { width: calc(100% - 32px); }
+  .help-view { padding: 12px; }
+  .help-view section { padding: 20px; }
+  .help-row, .common-links ul { grid-template-columns: 1fr; }
+  .help-row section { min-height: 0; }
+  .notify-view { flex-direction: column; }
+  .notify-list { width: 100%; height: auto; max-height: 180px; flex: 0 0 auto; border-right: 0; border-bottom: 1px solid var(--color-border-2); }
+  .notify-content { height: auto; min-height: 0; }
+  .notify-detail { padding: 24px 20px; overflow-wrap: anywhere; }
+}
 </style>

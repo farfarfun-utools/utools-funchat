@@ -186,4 +186,11 @@ async function copyImage() {
 :deep(.prose-chat blockquote) { padding-left: 12px; border-left: 3px solid var(--color-primary); color: var(--color-text-3); }
 :deep(.prose-chat table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
 :deep(.prose-chat th), :deep(.prose-chat td) { padding: 6px 10px; border: 1px solid var(--color-border-2); }
+@media (max-width: 600px) {
+  .chat-box-item { margin-right: 12px; margin-left: 12px; }
+  .chat-content { max-width: calc(100% - 42px); margin-right: 8px; margin-left: 8px; }
+  .prose-chat { margin-right: 0; padding: 10px 12px; }
+  .chat-user .prose-chat { margin-left: 0; }
+  .message-images img { max-width: 100%; }
+}
 </style>

@@ -77,4 +77,9 @@ function update(row: ParamRow, event: Event): void {
 .parameter-row input[type="range"]::-webkit-slider-thumb { width: 12px; height: 12px; margin-top: -5px; appearance: none; border: 2px solid var(--color-primary); border-radius: 50%; background: var(--color-bg-2); }
 .parameter-number { width: 80px; height: 32px; padding: 0 12px; border: 0; border-radius: 3px; outline: 0; background: var(--color-fill-2); text-align: center; }
 .parameter-number::-webkit-inner-spin-button, .parameter-number::-webkit-outer-spin-button { appearance: none; margin: 0; }
+@media (max-width: 480px) {
+  .parameter-row > span { width: 76px; flex-basis: 76px; }
+  .parameter-row input[type="range"] { margin-right: 12px; }
+  .parameter-number { width: 64px; padding: 0 8px; }
+}
 </style>

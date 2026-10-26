@@ -59,6 +59,7 @@ async function clearHistories() {
             </small>
           </span>
           <button v-if="tab === 'history' && filtered.length" class="clear-button" type="button" @click="clearHistories">清空话题</button>
+          <button class="history-close" type="button" title="关闭话题记录" aria-label="关闭话题记录" @click="store.state.historyOpen = false"><i class="iconfont icon-close" aria-hidden="true"></i></button>
         </div>
         <label class="history-search">
           <i class="iconfont icon-search" aria-hidden="true"></i>
@@ -104,12 +105,14 @@ async function clearHistories() {
 <style scoped>
 .history-mask { position: fixed; z-index: 100; inset: 0; display: flex; justify-content: flex-end; background: rgba(29, 33, 41, .6); }
 .history-panel { width: min(360px, 100vw); height: 100%; display: flex; flex-direction: column; overflow: hidden; color: var(--color-text-2); background: var(--color-bg-2); box-shadow: -4px 0 12px #00000014; }
-header { padding: 11px 16px 8px; }
-.history-identity { height: 42px; display: flex; align-items: center; }
-.history-copy { min-width: 0; margin-left: 12px; display: flex; flex-direction: column; }
+header { padding: 11px 16px 8px; flex: 0 0 auto; }
+.history-identity { min-height: 42px; display: flex; align-items: center; }
+.history-copy { min-width: 0; margin-left: 12px; display: flex; flex: 1; flex-direction: column; }
 .history-identity b { overflow: hidden; color: var(--color-text-1); font-size: 15px; font-weight: 500; line-height: 22px; text-overflow: ellipsis; white-space: nowrap; }
 .history-identity small { color: var(--color-text-3); font-size: 12px; line-height: 18px; }
-.clear-button { margin-left: auto; padding: 5px 9px; border-radius: 3px; color: var(--color-text-2); font-size: 12px; background: var(--color-fill-2); }
+.clear-button { margin-left: auto; padding: 5px 9px; flex: 0 0 auto; border-radius: 3px; color: var(--color-text-2); font-size: 12px; background: var(--color-fill-2); }
+.history-close { width: 28px; height: 28px; margin-left: 8px; flex: 0 0 28px; border-radius: 50%; color: var(--color-icon); }
+.history-close:hover { color: var(--color-primary); background: var(--color-fill-2); }
 .clear-button:hover { color: var(--color-primary); background: var(--color-fill-3); }
 .history-search { position: relative; height: 32px; margin-top: 17px; display: block; }
 .history-search i { position: absolute; top: 8px; left: 13px; color: var(--color-icon); font-size: 14px; }

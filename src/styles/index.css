@@ -60,7 +60,10 @@ img { max-width: 100%; }
 .fatal-error { position: fixed; z-index: 200; inset: 0; display: grid; place-items: center; padding: 30px; color: #d94b40; background: var(--color-bg-2); }
 .app-loading { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--color-text-3); background: var(--color-bg-2); }
 .app-loading img { width: 34px; height: 34px; border-radius: 7px; }
-.view-pane { display: flex; flex: 1; min-width: 0; height: 100%; overflow: hidden; }
+.view-pane { position: relative; display: flex; flex: 1; min-width: 0; height: 100%; overflow: hidden; }
+@media (max-width: 720px) {
+  .view-pane > .chat-view { margin-left: 65px; }
+}
 .page-enter-active, .page-leave-active { transition: opacity .16s cubic-bezier(.22, 1, .36, 1), transform .16s cubic-bezier(.22, 1, .36, 1); }
 .page-enter-from, .page-leave-to { opacity: 0; transform: translateY(6px); }
 @keyframes fade-in { from { opacity: 0; } }
