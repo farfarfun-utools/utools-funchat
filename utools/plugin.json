@@ -1,6 +1,6 @@
 {
   "pluginName": "言来语往",
-  "version": "0.1.1",
+  "version": "1.0.1",
   "description": "言来语往 FunChat：多角色 AI 对话，支持角色市场、话题回溯与一键导出；会话和配置保存在本地",
   "author": "farfarfun",
   "main": "dist/index.html",

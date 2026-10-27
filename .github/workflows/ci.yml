@@ -59,3 +59,24 @@ jobs:
         run: sh build.sh
         env:
           SKIP_CHECKS: ${{ matrix.os == 'ubuntu-latest' && '0' || '1' }}
+
+      - name: Package UPXS with organization secrets
+        if: runner.os == 'Linux' && github.event_name != 'pull_request'
+        uses: farfarfun-action/utools-devtools@c48e8ce06b6700d21c73917b3b16d6e5674c13ef # v0.1.4
+        with:
+          source: utools
+          output: release/utools-funchat.upxs
+          identity-file: identity.json
+          mid: ${{ secrets.UTOOLS_MID }}
+          uid: ${{ secrets.UTOOLS_UID }}
+          cellphone: ${{ secrets.UTOOLS_CELLPHONE }}
+      - name: Checksum UPXS
+        if: runner.os == 'Linux' && github.event_name != 'pull_request'
+        run: cd release && sha256sum utools-funchat.upxs > SHA256SUMS
+      - name: Upload UPXS installation preview
+        if: runner.os == 'Linux' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: utools-funchat-upxs-preview
+          path: release/
+          if-no-files-found: error
