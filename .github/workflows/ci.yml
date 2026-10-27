@@ -32,7 +32,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # corepack 按 package.json#packageManager 取 pnpm 版本，和 build.sh 的下限检查是同一套
       - name: Enable corepack
