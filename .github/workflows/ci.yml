@@ -75,7 +75,7 @@ jobs:
         run: cd release && sha256sum utools-funchat.upxs > SHA256SUMS
       - name: Upload UPXS installation preview
         if: runner.os == 'Linux' && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: utools-funchat-upxs
           path: release/
