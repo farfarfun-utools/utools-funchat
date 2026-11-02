@@ -7,6 +7,7 @@ import SideMenu from './features/navigation/SideMenu.vue';
 import SettingsView from './features/settings/SettingsView.vue';
 import { useChatStore } from './stores/chat.js';
 import { host } from './services/utools.js';
+import { publicAgents } from './services/agent-tools.ts';
 
 const store = useChatStore();
 const logoUrl = `${import.meta.env.BASE_URL}logo.png`;
@@ -77,6 +78,7 @@ onMounted(async () => {
     store.state.error = error instanceof Error ? error.message : String(error);
     store.state.ready = true;
   }
+  host.registerTool?.('list_chat_agents', () => publicAgents(store.state.agents));
 });
 onBeforeUnmount(() => {
   compactWindow?.removeEventListener('change', fitSidebar);

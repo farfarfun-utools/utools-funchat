@@ -38,6 +38,12 @@
       ]
     }
   ],
+  "tools": {
+    "list_chat_agents": {
+      "description": "列出 FunChat 中可选的 AI 角色名称和 ID，不返回角色提示词、模型配置、聊天记录或 API 密钥。",
+      "inputSchema": { "type": "object", "additionalProperties": false }
+    }
+  },
   "platform": [
     "darwin",
     "win32",

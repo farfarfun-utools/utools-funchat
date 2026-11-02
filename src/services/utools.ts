@@ -54,7 +54,7 @@ type AlwaysApi = Pick<typeof utools,
 >;
 
 // 可能缺席的接口：AI 能力要看客户端版本和用户是否开通，setExpandHeight 是 8.0 才有的名字。
-type OptionalApi = Pick<typeof utools, 'setExpandHeight'>;
+type OptionalApi = Pick<typeof utools, 'setExpandHeight' | 'registerTool'>;
 
 // 刻意不写成 `Record<string, any> & ...`：索引签名不会动已声明字段的类型，但会让**没声明**
 // 的名字也通过检查并退化成 any——上面那段注释里的 setExpendHeight 就是这么活下来的。
