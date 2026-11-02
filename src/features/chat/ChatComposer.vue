@@ -15,6 +15,7 @@ type PendingImage = Partial<ImageAttachment> & { id: string; url: string; name: 
 
 const store = useChatStore();
 const text = ref('');
+const imageMode = ref(false);
 const textarea = ref();
 const root = ref();
 const popup = ref('');
@@ -163,11 +164,15 @@ async function submit() {
     warn('附件还在处理，稍等一下');
     return;
   }
+  if (imageMode.value && (pending.length || pdf)) {
+    warn('图片生成仅支持文字描述，请先移除附件');
+    return;
+  }
   text.value = '';
   attachments.value = [];
   pdfAttachment.value = null;
   const message = [value.trim(), pdf?.content].filter(Boolean).join('\n\n');
-  if (!await store.send(message, pending.map((item) => item.url))) {
+  if (!await (imageMode.value ? store.sendImage(message) : store.send(message, pending.map((item) => item.url)))) {
     text.value = value;
     attachments.value = pending;
     pdfAttachment.value = pdf;
@@ -239,6 +244,9 @@ onBeforeUnmount(() => clearTimeout(noticeTimer));
         <button class="attach-button" type="button" :title="`添加图片或 PDF（也可直接粘贴或拖入；图片最多 ${MAX_ATTACHMENTS} 张）`" aria-label="添加图片或 PDF" @click="picker?.click()">
           <i class="iconfont icon-file" aria-hidden="true"></i>
         </button>
+        <button type="button" :title="imageMode ? '切换到聊天' : '切换到图片生成'" :aria-label="imageMode ? '切换到聊天' : '切换到图片生成'" :aria-pressed="imageMode" @click="imageMode = !imageMode">
+          <i class="iconfont icon-mofabang" aria-hidden="true"></i>
+        </button>
       </div>
       <div class="tool-group tool-group-end">
         <button type="button" title="API 设置" aria-label="API 设置" :aria-expanded="popup === 'api'" @click="togglePopup('api')"><i class="iconfont icon-key" aria-hidden="true"></i></button>
@@ -271,7 +279,12 @@ onBeforeUnmount(() => clearTimeout(noticeTimer));
       </div>
       <span v-if="attachments.length" class="attachment-hint" :class="{ blocked: noVision }">{{ noVision ? `${store.activeModel.value} 不支持识图` : '图片需所选模型支持识图' }}</span>
     </div>
-    <div class="textarea-wrap" @click="textarea?.focus()"><textarea ref="textarea" v-model="text" placeholder="聊点什么吧...（可粘贴图片或 PDF）" spellcheck="false" @keydown="keydown" @paste="paste"></textarea></div>
+    <div v-if="imageMode" class="image-model-row">
+      <span>图片模型</span>
+      <input :value="store.state.settings.imageModel || 'gpt-image-1.5'" aria-label="图片模型" placeholder="gpt-image-1.5" @change="updateSetting('imageModel', ($event.target as HTMLInputElement).value.trim() || 'gpt-image-1.5')">
+      <span v-if="store.state.settings.provider === 'utools'">请切换到支持图片生成的 API 线路</span>
+    </div>
+    <div class="textarea-wrap" @click="textarea?.focus()"><textarea ref="textarea" v-model="text" :placeholder="imageMode ? '描述想生成的图片...' : '聊点什么吧...（可粘贴图片或 PDF）'" spellcheck="false" @keydown="keydown" @paste="paste"></textarea></div>
     <div class="composer-footer">
       <span v-if="notice" class="composer-notice" role="status">{{ notice }}</span>
       <span class="token-count" :class="{ 'has-token': displayedTokens > 0 }">{{ displayedTokens.toLocaleString() }}</span>
@@ -284,6 +297,11 @@ onBeforeUnmount(() => clearTimeout(noticeTimer));
 .chat-composer { --composer-height: 160px; position: relative; height: var(--composer-height); padding-top: 3px; display: flex; flex: 0 0 var(--composer-height); flex-direction: column; overflow: visible; background: var(--color-bg-2); border-top: 1px solid var(--color-border-2); }
 /* 带图时整条输入区变高，缩略图不挤占本就只有两行的输入框 */
 .chat-composer.has-images { --composer-height: 232px; }
+.chat-composer:has(.image-model-row) { --composer-height: 190px; }
+.chat-composer.has-images:has(.image-model-row) { --composer-height: 262px; }
+.image-model-row { min-height: 30px; padding: 0 16px; display: flex; align-items: center; gap: 8px; color: var(--color-text-3); font-size: 12px; }
+.image-model-row input { width: 135px; height: 24px; padding: 2px 5px; flex: 0 0 135px; border: 1px solid var(--color-border-2); border-radius: 4px; color: var(--color-text-1); background: var(--color-bg-2); }
+.image-model-row span:last-child:not(:first-child) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-composer.dragging { border-top-color: var(--color-primary); box-shadow: inset 0 0 0 1px var(--color-primary); }
 .image-picker { display: none; }
 .composer-tools .attach-button { display: grid; place-items: center; }
@@ -324,6 +342,7 @@ onBeforeUnmount(() => clearTimeout(noticeTimer));
 .tool-group > :not(:last-child) { position: relative; }
 .tool-group > :not(:last-child)::after { content: ""; position: absolute; top: 8px; right: -13px; width: 1px; height: 14px; background: var(--color-fill-2); pointer-events: none; }
 .composer-tools button:hover { color: var(--color-primary); background: var(--color-fill-1); }
+.composer-tools button[aria-pressed="true"] { color: var(--color-primary); background: var(--color-primary-light-1); }
 .composer-tools button:disabled { opacity: 1; color: var(--color-icon); }
 .composer-tools .more-button { width: 18px; height: 18px; border-radius: 0; color: var(--color-text-3); }
 .popup-anchor { position: relative; width: 28px; height: 28px; flex: 0 0 28px; }

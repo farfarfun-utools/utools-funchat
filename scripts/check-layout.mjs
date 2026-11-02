@@ -67,6 +67,9 @@ try {
       await s.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
       await settle();
       await check('.side-menu, .chat-view, .chat-header, .composer-tools', true);
+      await click('button[aria-label="切换到图片生成"]');
+      await check('.image-model-row, .image-model-row input, .chat-composer', true);
+      await click('button[aria-label="切换到聊天"]');
       if (width <= 720) {
         assert.ok(await s.evaluate('store.state.sidebarCollapsed'), '窄窗口没有自动收起好友栏');
         await click('.collapse-button');

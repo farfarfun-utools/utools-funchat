@@ -168,6 +168,21 @@ test('saveHistory writes image parts through unchanged', async () => {
   assert.deepEqual(stored[0].content[1], { type: 'image_url', image_url: { url } });
 });
 
+test('generated images survive history reload and are removed with the topic', async () => {
+  resetDatabase();
+  const id = 'chat@ai@1#1000';
+  const url = `data:image/png;base64,${'A'.repeat(900_000)}`;
+  const message = { role: 'assistant', content: [{ type: 'image_url', image_url: { url }, imageRef: 'generated-1' }] };
+  saveHistory({ id, title: '图片', messages: [{ role: 'user', content: '画图' }, message] });
+
+  assert.equal(host.db.allDocs('image@ai@1#1000#').length, 2, '大图应拆为两个可保存的文档');
+  assert.ok(!JSON.stringify(host.db.get('chatbody@ai@1#1000')).includes('AAAA'), '正文不能存整张图');
+  assert.equal((await loadHistoryMessages(id))[1].content[0].image_url.url, url);
+
+  removeHistory(id);
+  assert.deepEqual(host.db.allDocs('image@ai@1#1000#'), []);
+});
+
 /* ---------- 文档库写入语义 ---------- */
 
 test('rejects a write whose _rev no longer matches the stored document', () => {

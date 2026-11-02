@@ -15,6 +15,7 @@ export type MessagePart = {
   type?: string;
   text?: string;
   image_url?: { url?: string };
+  imageRef?: string;
   file?: { filename?: string };
 };
 
@@ -22,6 +23,7 @@ export type ChatMessage = Record<string, unknown> & {
   role?: string;
   content?: string | MessagePart[] | null;
   error?: boolean;
+  imageGeneration?: boolean;
 };
 
 export type AgentAvatar = Record<string, unknown> & {
@@ -124,6 +126,7 @@ export type KnownSettings = {
   baseUrl?: string;
   apiKey?: string;
   model?: string;
+  imageModel?: string;
   theme?: ThemePreference;
   dark?: boolean;
   /** 输入框的发送键，默认 `ctrl-enter`。 */

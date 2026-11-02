@@ -149,7 +149,7 @@ export async function streamChat({ settings, agent, messages, signal, onDelta }:
     return;
   }
 
-  const url = normalizeChatUrl(settings.baseUrl);
+  const url = normalizeChatUrl(settings.baseUrl || (settings.apiKey ? 'https://api.openai.com' : ''));
   if (!url) throw new Error('请先在设置中配置 OpenAI 兼容接口，或选择 uTools AI。');
   const response = await fetch(url, {
     method: 'POST',

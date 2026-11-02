@@ -53,6 +53,32 @@ test('persists every message instead of only the context window', async () => {
   );
 });
 
+test('generated image is saved and reopened with its original bytes', async () => {
+  await setup();
+  store.updateSettings({
+    provider: 'openai',
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'key',
+    apiRoutes: [{ id: 'image-route', name: '图片', provider: 'openai', baseUrl: 'https://api.example.com/v1', apiKey: 'key' }],
+    activeRouteId: 'image-route',
+  });
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ data: [{ b64_json: 'AAAA' }] }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+  try {
+    assert.equal(await store.sendImage('画一只杯子'), true);
+    const history = store.state.histories[0];
+    assert.ok(history);
+    assert.equal(host.db.allDocs('image@').length, 1);
+    store.newConversation();
+    await store.openHistory(history);
+    assert.equal(store.state.messages[1].content[1].image_url.url, 'data:image/png;base64,AAAA');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 test('still truncates the outgoing request to the context window', async () => {
   await setup({ contextLength: 2 });
   let sent;

@@ -28,7 +28,7 @@
 
 ## UPXS 安装与发布
 
-从 [v1.0.3 Release](https://github.com/farfarfun-utools/utools-funchat/releases/tag/v1.0.3) 下载 `utools-funchat-1.0.3.upxs`，导入 uTools 使用。也可在成功的 CI 中下载 `utools-funchat-upxs` 附件。打包链路已由用户在 FunCalc 上验证；本插件的实机安装与功能仍需分别确认。
+从 [v1.0.4 Release](https://github.com/farfarfun-utools/utools-funchat/releases/tag/v1.0.4) 下载 `utools-funchat-1.0.4.upxs`，导入 uTools 使用。也可在成功的 CI 中下载 `utools-funchat-upxs` 附件。打包链路已由用户在 FunCalc 上验证；本插件的实机安装与功能仍需分别确认。
 
 项目根目录 [`identity.json`](identity.json) 明文维护官方项目 ID `zc8khhsw`。`mid`、`uid`、`cellphone` 由 `farfarfun-utools` 组织的 `UTOOLS_MID`、`UTOOLS_UID`、`UTOOLS_CELLPHONE` Secrets 注入，不写入公开配置。CI 和 Release 统一调用固定版本的 [utools-devtools](https://github.com/farfarfun-action/utools-devtools)，生成 `.upxs` 与 `SHA256SUMS`，PR 不执行身份打包。
 
@@ -54,10 +54,11 @@
 | **多模型接入** | uTools 内置 AI、OpenAI 兼容接口，或任意自定义 API 地址。角色不指定模型时自动跟随全局设置 |
 | **模型清单** | uTools AI 线路会把显示名、是否识图、单次调用的能量消耗一并列出；模型不识图时，添加图片会直接提醒 |
 | **PDF 输入** | 复制 PDF 文件后在聊天框粘贴，也可拖入或选取；粘贴时可选提取文字或按页面图片识别 |
+| **图片生成** | 在输入框切换到图片模式，输入描述并选择图片模型；生成结果保存在话题中，随整库备份导出。需支持 `/images/generations` 的 API 线路 |
 | **话题回溯** | 每个好友的历史话题独立存档，支持收藏、全文搜索、随时继续 |
 | **全局搜索** | 一个输入框同时搜好友和所有历史话题，直接跳到那次对话 |
 | **一键导出** | 整段会话导出 Markdown / HTML / PDF，单条消息存成 PNG 图片 |
-| **全量备份** | 好友、会话、设置导成一份 JSON，换台机器整库恢复回来。备份内含明文 API 密钥，见下方「数据与隐私」 |
+| **全量备份** | 好友、会话、生成图片和设置导成一份 JSON，换台机器整库恢复回来。备份内含明文 API 密钥，见下方「数据与隐私」 |
 | **明暗主题** | 浅色、深色、跟随系统 |
 | **本地优先** | 会话和配置默认保存在 uTools 本地数据库；聊天消息会发送到所选的 uTools AI，使用私有 API 时消息和 API Key 会发送到用户配置的 OpenAI 兼容服务 |
 
@@ -105,12 +106,14 @@ sh build.sh
 
 > PDF 在本地处理后随消息发送：文字模式最多提取前 30000 字；页面图片模式需识图模型，最多 4 页。单个 PDF 最大 20 MB。扫描件没有可提取文字时请选择页面图片模式。
 
+> 生成图片时，点击输入框附件按钮旁的图片模式按钮，填写描述并发送。默认图片模型为 `gpt-image-1.5`，可在输入区修改。uTools AI 线路没有图片生成接口；请使用支持 `/images/generations` 的 OpenAI 兼容线路。使用官方 API Key 时可留空 API 地址。
+
 ## 数据与隐私
 
-- 会话、好友配置、API 路线（**含明文 API Key**）都存在 uTools 的 `dbStorage` 里。消息只发给你选的
-  那条线路（uTools AI 或你自己填的地址），插件本身不另外上报任何数据。
-- **`dbStorage` 属于 uTools 的同步数据库**：如果你在 uTools 里开启了数据同步，明文 Key 会随 uTools
-  账号同步到云端，并下发到你登录的其他设备。只想让它留在本机的话，请关闭 uTools 的数据同步功能。
+- 会话、好友和生成图片存在 uTools 文档库；设置与 API 路线（**含明文 API Key**）存在 `dbStorage`。
+  聊天消息发给所选线路；图片生成描述发给所选的图片生成 API，返回的图片会下载到插件数据中。
+- **uTools 数据库可同步**：如果你在 uTools 里开启了数据同步，明文 Key、会话和生成图片可能随账号
+  同步到其他设备。只想留在本机，请关闭 uTools 的数据同步功能。
 - 卸载插件会一并删除这些数据。换设备或重装前，到「设置 → 数据备份」导一份出来，或者确认
   uTools 的数据同步是开着的。
 - **备份文件内含明文 API 密钥**，等同于凭据：拿到文件的人可以用你的账号调用那些服务。请妥善

@@ -12,7 +12,7 @@ import {
   parseBackup,
   serializeBackup,
 } from '../src/services/backup.ts';
-import { saveAgent, saveHistory, saveSettings, loadSettings } from '../src/services/storage.ts';
+import { saveAgent, saveHistory, saveSettings, loadSettings, loadHistoryMessages } from '../src/services/storage.ts';
 import { host } from '../src/services/utools.ts';
 
 function resetDatabase() {
@@ -46,6 +46,22 @@ test('backup carries agents, topic index, message bodies and settings', () => {
   assert.ok(ids.includes('chat@ai@1#1700000000000'), '话题索引没进备份');
   // chatbody@ 不以 chat@ 开头，漏了它备份里就只剩标题
   assert.ok(ids.some((id) => id.startsWith('chatbody@')), '话题正文没进备份');
+});
+
+test('backup restores generated image documents with the conversation', async () => {
+  seed();
+  const id = 'chat@ai@1#1700000000000';
+  const url = `data:image/png;base64,${'A'.repeat(800_000)}`;
+  saveHistory({ id, title: '画图', messages: [
+    { role: 'user', content: '画图' },
+    { role: 'assistant', content: [{ type: 'image_url', image_url: { url }, imageRef: 'generated-1' }] },
+  ] });
+  const parsed = parseBackup(serializeBackup(buildBackup()));
+  assert.ok(parsed);
+  assert.ok(parsed.backup.documents.some((document) => document._id.startsWith('image@')));
+  resetDatabase();
+  applyBackup(parsed.backup);
+  assert.equal((await loadHistoryMessages(id))[1].content[0].image_url.url, url);
 });
 
 test('backup includes the plaintext API key on purpose', () => {

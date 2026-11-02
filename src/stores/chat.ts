@@ -1,5 +1,6 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { streamChat } from '../services/chat.ts';
+import { generateImage } from '../services/image-generation.ts';
 import { host } from '../services/utools.ts';
 import { clonePlain } from '../services/plain-clone.ts';
 import { loadUtoolsModelInfo } from '../services/models.ts';
@@ -115,6 +116,11 @@ function overriddenParams(agent: Agent): Agent {
 function requestMessages(): ChatMessage[] {
   const size = Math.max(Number(paramOverrides.contextLength ?? state.currentAgent?.contextLength) || 16, 1) * 2;
   const messages = clonePlain(state.messages.slice(-size)) as ChatMessage[];
+  for (const message of messages) {
+    if (message.role === 'assistant' && Array.isArray(message.content) && message.content.some((part) => part.imageRef)) {
+      message.content = messageText(message);
+    }
+  }
   const prefix = String(state.currentAgent?.autoPrefix || '').trim();
   const lastUser = prefix ? messages.findLastIndex((message) => message.role === 'user') : -1;
   const target = lastUser >= 0 ? messages[lastUser] : undefined;
@@ -493,6 +499,40 @@ async function send(text: string, images: readonly string[] = []): Promise<boole
   return sendContent(buildUserContent(text, images));
 }
 
+async function sendImage(prompt: string): Promise<boolean> {
+  if (!prompt.trim() || state.loading || !state.currentAgent) return false;
+  state.messages.push({ role: 'user', content: prompt.trim(), imageGeneration: true }, { role: 'assistant', content: '' });
+  touchMessages();
+  const assistantMessage = state.messages.at(-1) as ChatMessage;
+  const streamId = ++activeStream;
+  state.loading = true;
+  state.error = '';
+  abortController = new AbortController();
+  try {
+    const url = await generateImage(prompt.trim(), state.settings, abortController.signal);
+    if (streamId === activeStream) assistantMessage.content = [
+      { type: 'text', text: '已生成图片' },
+      { type: 'image_url', image_url: { url }, imageRef: crypto.randomUUID() },
+    ];
+  } catch (error) {
+    const failure = error as { name?: string; message?: string } | null;
+    if (failure?.name === 'AbortError') {
+      if (!assistantMessage.content) removeMessage(assistantMessage);
+    } else if (streamId === activeStream) {
+      state.error = failure?.message || String(error);
+      assistantMessage.content = `请求失败：${state.error}`;
+      assistantMessage.error = true;
+    }
+  } finally {
+    if (streamId === activeStream) {
+      state.loading = false;
+      abortController = null;
+      if (state.messages.includes(assistantMessage)) persistCurrentConversation();
+    }
+  }
+  return true;
+}
+
 async function sendContent(content: ChatMessage['content']): Promise<boolean> {
   if (!hasContent(content) || state.loading || !state.currentAgent) return false;
   state.messages.push({ role: 'user', content }, { role: 'assistant', content: '' });
@@ -610,11 +650,13 @@ async function retryMessage(index: number): Promise<void> {
   if (userIndex < 0) return;
   // 原样重放：带图的问题要连图一起重发，不能只把文字取出来
   const original = clonePlain(state.messages[userIndex].content) as ChatMessage['content'];
+  const imageGeneration = state.messages[userIndex].imageGeneration;
   const content = typeof original === 'string' ? original.trim() : original;
   if (!hasContent(content)) return;
   state.messages.splice(userIndex);
   touchMessages();
-  await sendContent(content);
+  if (imageGeneration) await sendImage(messageText({ content }));
+  else await sendContent(content);
 }
 
 function updateSettings(next: Partial<Settings>): void {
@@ -713,6 +755,7 @@ export function useChatStore() {
     togglePin,
     newConversation,
     send,
+    sendImage,
     stop: () => stop(),
     persistCurrentConversation,
     openHistory,

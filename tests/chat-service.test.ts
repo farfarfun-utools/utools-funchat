@@ -99,6 +99,23 @@ test('reads a non-streaming JSON reply', async () => {
   assert.equal(received, '完整回复');
 });
 
+test('uses the official endpoint when only an API key is configured', async () => {
+  const originalFetch = globalThis.fetch;
+  let requested = '';
+  globalThis.fetch = async (url) => {
+    requested = String(url);
+    return new Response(JSON.stringify({ choices: [{ message: { content: '好了' } }] }), {
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  try {
+    await streamChat({ settings: { provider: 'openai', apiKey: 'key' }, agent: { params: {} }, messages: [], onDelta() {} });
+    assert.equal(requested, 'https://api.openai.com/v1/chat/completions');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('surfaces the server error message', async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({ error: { message: '额度不足' } }), { status: 402 });

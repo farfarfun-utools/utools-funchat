@@ -18,6 +18,8 @@ const MIGRATED_KEY = 'funchat.documents.migrated';
 // 所以拆成两份：chat@ 存索引，chatbody@ 存正文，点开某条话题时才去读它那一份。
 const HISTORY_PREFIX = 'chat@';
 const HISTORY_BODY_PREFIX = 'chatbody@';
+const IMAGE_PREFIX = 'image@';
+const IMAGE_CHUNK_SIZE = 700_000;
 
 export type { StorageDocument } from './utools.ts';
 export type { ApiRoute, Settings, HistoryInput } from '../types.ts';
@@ -111,10 +113,44 @@ export function removeAgent(agentId: string): void {
   removeDocument(agentId);
   for (const history of allDocuments(`${HISTORY_PREFIX}${agentId}#`)) host.db.remove(history);
   for (const body of allDocuments(`${HISTORY_BODY_PREFIX}${agentId}#`)) host.db.remove(body);
+  for (const image of allDocuments(`${IMAGE_PREFIX}${agentId}#`)) host.db.remove(image);
 }
 
 function bodyIdOf(id: string): string {
   return `${HISTORY_BODY_PREFIX}${id.slice(HISTORY_PREFIX.length)}`;
+}
+
+function imagePrefixOf(id: string): string {
+  return `${IMAGE_PREFIX}${id.slice(HISTORY_PREFIX.length)}#`;
+}
+
+function saveGeneratedImages(id: string, messages: ChatMessage[]): ChatMessage[] {
+  const next = clonePlain(messages);
+  for (const message of next) {
+    for (const part of Array.isArray(message.content) ? message.content : []) {
+      const ref = part.imageRef;
+      const url = part.image_url?.url;
+      if (!ref || !url) continue;
+      if (!/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/u.test(url)) throw new Error('生成图片数据格式无效');
+      if (url.length > 20 * 1024 * 1024) throw new Error('生成图片超过 20 MB，无法保存');
+      for (let index = 0; index * IMAGE_CHUNK_SIZE < url.length; index += 1) {
+        const chunkId = `${imagePrefixOf(id)}${ref}#${index}`;
+        if (!host.db.get(chunkId)) putDocument({ _id: chunkId, data: url.slice(index * IMAGE_CHUNK_SIZE, (index + 1) * IMAGE_CHUNK_SIZE) });
+      }
+      part.image_url!.url = '';
+    }
+  }
+  return next;
+}
+
+function removeUnusedImages(id: string, messages: ChatMessage[]): void {
+  const refs = new Set(messages.flatMap((message) => Array.isArray(message.content)
+    ? message.content.map((part) => part.imageRef).filter(Boolean)
+    : []));
+  for (const document of allDocuments(imagePrefixOf(id))) {
+    const ref = document._id.slice(imagePrefixOf(id).length).split('#')[0];
+    if (!refs.has(ref)) host.db.remove(document);
+  }
 }
 
 // 正文搬走之后，列表上还要显示的 Token 数、以及搜索要用的正文文本，都得在落盘时先算好。
@@ -169,7 +205,19 @@ export async function loadHistories(): Promise<History[]> {
  */
 export async function loadHistoryMessages(id: string): Promise<ChatMessage[]> {
   const body = await host.db.promises.get(bodyIdOf(id));
-  return Array.isArray(body?.messages) ? body.messages : [];
+  const messages = Array.isArray(body?.messages) ? body.messages as ChatMessage[] : [];
+  const hasImages = messages.some((message) => Array.isArray(message.content) && message.content.some((part) => part.imageRef));
+  const documents = hasImages ? await host.db.promises.allDocs(imagePrefixOf(id)) : [];
+  for (const message of messages) {
+    for (const part of Array.isArray(message.content) ? message.content : []) {
+      if (!part.imageRef || !part.image_url) continue;
+      const prefix = `${imagePrefixOf(id)}${part.imageRef}#`;
+      part.image_url.url = documents.filter((document) => document._id.startsWith(prefix))
+        .sort((a, b) => Number(a._id.slice(prefix.length)) - Number(b._id.slice(prefix.length)))
+        .map((document) => String(document.data || '')).join('');
+    }
+  }
+  return messages;
 }
 
 /**
@@ -209,7 +257,7 @@ export function saveHistory({ id, title, messages, favorite = false }: HistoryIn
   const now = new Date().toLocaleString('zh-CN', { hour12: false });
   document.title = title;
   if (messages) {
-    const body = stripImagesToFit(messages);
+    const body = stripImagesToFit(saveGeneratedImages(id, messages));
     const stored = host.db.get(bodyIdOf(id)) || { _id: bodyIdOf(id) };
     stored.messages = body;
     putDocument(stored);
@@ -221,6 +269,7 @@ export function saveHistory({ id, title, messages, favorite = false }: HistoryIn
   document.isFavorite = favorite;
   const result = putDocument(document);
   if (result?.rev) document._rev = result.rev;
+  if (messages) removeUnusedImages(id, messages);
   return toHistory(document);
 }
 
@@ -232,6 +281,7 @@ export function saveHistory({ id, title, messages, favorite = false }: HistoryIn
 export function removeHistory(id: string): void {
   removeDocument(id);
   removeDocument(bodyIdOf(id));
+  for (const image of allDocuments(imagePrefixOf(id))) host.db.remove(image);
 }
 
 let routeSeed = 0;

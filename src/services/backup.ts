@@ -20,16 +20,16 @@ import type { Settings } from '../types.ts';
  * 备份格式版本。读到更大的版本号就整份拒绝，免得按旧字段猜新结构 —— 猜错的表现是
  * 「恢复成功了但东西不对」，比直接报错难查得多。
  */
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2;
 
 /**
  * 要备份的文档前缀。
  *
  * 用白名单而不是 allDocs('') 整库捞：将来多出别的文档（草稿、缓存之类），默认不该进备份，
  * 而不是被悄悄带上。注意 'chatbody@' 必须单独列 —— 它不以 'chat@' 开头（'chatb' ≠ 'chat@'），
- * 漏了它备份里就只有话题标题，正文一条都没有。
+ * 漏了它备份里就只有话题标题，正文一条都没有。image@ 存生成图片，必须一起备份。
  */
-const BACKUP_PREFIXES = ['ai@', 'chat@', 'chatbody@'];
+const BACKUP_PREFIXES = ['ai@', 'chat@', 'chatbody@', 'image@'];
 
 export type Backup = {
   /** 格式版本，见 BACKUP_VERSION。 */
@@ -37,7 +37,7 @@ export type Backup = {
   exportedAt: number;
   /** 全部设置，含 API 路线与明文密钥。 */
   settings: Settings;
-  /** 好友（ai@）、话题索引（chat@）、话题正文（chatbody@）。消息里的图片是内联的，跟着正文一起走。 */
+  /** 好友、话题索引、话题正文和生成图片的分块文档。 */
   documents: StorageDocument[];
 };
 
