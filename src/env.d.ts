@@ -8,6 +8,8 @@ declare global {
     saveFile?: (options: unknown, data: unknown, encoding: string) => Promise<boolean>;
     /** 读用户选的文本文件；用户取消时给 null。只有 uTools 里有，浏览器里退回 <input type="file">。 */
     openTextFile?: (options?: unknown) => Promise<string | null>;
+    /** 从系统文件剪贴板读取 PDF；浏览器预览没有这个接口。 */
+    readClipboardPdf?: () => { name: string; bytes: Uint8Array } | { error: string } | null;
   }
 }
 

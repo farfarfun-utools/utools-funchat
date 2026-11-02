@@ -102,11 +102,23 @@ async function choosePdf(mode: 'text' | 'images') {
 }
 
 function paste(event: ClipboardEvent) {
-  const files = supportedFilesFromTransfer(event.clipboardData);
-  // 剪贴板里没有支持的文件时，纯文本粘贴仍走浏览器默认行为
-  if (!files.length) return;
-  event.preventDefault();
-  addFiles(files);
+  const files = supportedFilesFromTransfer(event.clipboardData).filter((file) => !isPdfFile(file) || file.size !== 0);
+  if (files.length) {
+    event.preventDefault();
+    addFiles(files);
+    return;
+  }
+  const native = window.readClipboardPdf?.();
+  if (native) {
+    event.preventDefault();
+    if ('error' in native) warn(native.error);
+    else addFiles([new File([Uint8Array.from(native.bytes)], native.name, { type: 'application/pdf' })]);
+    return;
+  }
+  // 复制的只是文字时仍由输入框正常粘贴；文件剪贴板不可读时明确提醒。
+  if (/^[^\r\n]+\.pdf$/i.test(event.clipboardData?.getData('text/plain')?.trim() || '')) {
+    warn('只获取到文件名，请拖入 PDF 或点击附件按钮选择文件');
+  }
 }
 
 // 只有拖的是文件才接管：拖选中的文字进输入框仍然走浏览器默认行为

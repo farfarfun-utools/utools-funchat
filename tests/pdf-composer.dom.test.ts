@@ -87,3 +87,59 @@ test('page-image mode adds PDF pages as image attachments', async () => {
     wrapper.unmount();
   }
 });
+
+test('uses native clipboard bytes when the paste event has only the PDF filename', async () => {
+  window.readClipboardPdf = () => ({ name: 'example.pdf', bytes: new TextEncoder().encode('%PDF-1.4') });
+  const wrapper = mount(ChatComposer);
+  try {
+    const event = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', { value: {
+      items: [], files: [], getData: () => 'example.pdf',
+    } });
+    wrapper.get('textarea').element.dispatchEvent(event);
+    await nextTick();
+    assert.equal(event.defaultPrevented, true);
+    assert.equal(wrapper.get('.pdf-mode-dialog').element.open, true);
+    assert.equal(wrapper.get('textarea').element.value, '');
+  } finally {
+    wrapper.unmount();
+    delete window.readClipboardPdf;
+  }
+});
+
+test('uses native clipboard bytes when Chromium exposes an empty PDF file', async () => {
+  window.readClipboardPdf = () => ({ name: 'example.pdf', bytes: new TextEncoder().encode('%PDF-1.4') });
+  const wrapper = mount(ChatComposer);
+  try {
+    const empty = new File([], 'example.pdf', { type: 'application/pdf' });
+    const event = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', { value: {
+      items: [{ kind: 'file', getAsFile: () => empty }], files: [empty], getData: () => '',
+    } });
+    wrapper.get('textarea').element.dispatchEvent(event);
+    await nextTick();
+    assert.equal(event.defaultPrevented, true);
+    assert.equal(wrapper.get('.pdf-mode-dialog').element.open, true);
+  } finally {
+    wrapper.unmount();
+    delete window.readClipboardPdf;
+  }
+});
+
+test('warns when a pasted PDF name has no readable file data', async () => {
+  window.readClipboardPdf = () => null;
+  const wrapper = mount(ChatComposer);
+  try {
+    const event = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', { value: {
+      items: [], files: [], getData: () => 'example.pdf',
+    } });
+    wrapper.get('textarea').element.dispatchEvent(event);
+    await nextTick();
+    assert.equal(event.defaultPrevented, false);
+    assert.match(wrapper.get('.composer-notice').text(), /只获取到文件名/);
+  } finally {
+    wrapper.unmount();
+    delete window.readClipboardPdf;
+  }
+});
