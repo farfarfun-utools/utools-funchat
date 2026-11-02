@@ -1,6 +1,6 @@
 {
   "pluginName": "言来语往",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "言来语往 FunChat：多角色 AI 对话、图片生成、话题回溯与一键导出；会话和配置保存在 uTools 数据库",
   "author": "farfarfun",
   "main": "dist/index.html",
