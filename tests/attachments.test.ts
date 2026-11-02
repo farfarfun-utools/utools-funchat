@@ -7,7 +7,9 @@ import {
   fitSize,
   imagesFromTransfer,
   isImageFile,
+  isPdfFile,
   needsReencode,
+  supportedFilesFromTransfer,
   transferHasFiles,
 } from '../src/features/chat/attachments.ts';
 
@@ -24,6 +26,17 @@ test('recognises image files by MIME type', () => {
   assert.equal(isImageFile(undefined), false);
 });
 
+test('recognises PDFs from clipboard MIME or filename', () => {
+  assert.equal(isPdfFile(file('application/pdf', 'report')), true);
+  assert.equal(isPdfFile(file('', 'report.PDF')), true);
+  assert.equal(isPdfFile(file('text/plain', 'notes.txt')), false);
+  const pdf = file('application/pdf', 'report.pdf');
+  const image = file('image/png', 'screenshot.png');
+  assert.deepEqual(supportedFilesFromTransfer(transfer({
+    items: [{ kind: 'string' }, { kind: 'file', file: pdf }, { kind: 'file', file: image }],
+  })), [pdf, image]);
+});
+
 test('picks images out of a paste that also carries text', () => {
   const image = file('image/png', '截图.png');
   const picked = imagesFromTransfer(transfer({
@@ -35,6 +48,7 @@ test('picks images out of a paste that also carries text', () => {
 test('falls back to the files list when items carry nothing usable', () => {
   const image = file('image/jpeg', 'a.jpg');
   assert.deepEqual(imagesFromTransfer(transfer({ items: [{ kind: 'string' }], files: [image, file('text/csv')] })), [image]);
+  assert.deepEqual(imagesFromTransfer(transfer({ items: [{ kind: 'file', file: file('application/pdf') }], files: [image] })), [image]);
   assert.deepEqual(imagesFromTransfer(transfer({})), []);
   assert.deepEqual(imagesFromTransfer(null), []);
 });

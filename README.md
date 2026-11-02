@@ -28,7 +28,7 @@
 
 ## UPXS 安装与发布
 
-从 [v1.0.1 Release](https://github.com/farfarfun-utools/utools-funchat/releases/tag/v1.0.1) 下载 `utools-funchat-1.0.1.upxs`，导入 uTools 使用。也可在成功的 CI 中下载 `utools-funchat-upxs` 附件。打包链路已由用户在 FunCalc 上验证；本插件的实机安装与功能仍需分别确认。
+从 [v1.0.2 Release](https://github.com/farfarfun-utools/utools-funchat/releases/tag/v1.0.2) 下载 `utools-funchat-1.0.2.upxs`，导入 uTools 使用。也可在成功的 CI 中下载 `utools-funchat-upxs` 附件。打包链路已由用户在 FunCalc 上验证；本插件的实机安装与功能仍需分别确认。
 
 项目根目录 [`identity.json`](identity.json) 明文维护官方项目 ID `zc8khhsw`。`mid`、`uid`、`cellphone` 由 `farfarfun-utools` 组织的 `UTOOLS_MID`、`UTOOLS_UID`、`UTOOLS_CELLPHONE` Secrets 注入，不写入公开配置。CI 和 Release 统一调用固定版本的 [utools-devtools](https://github.com/farfarfun-action/utools-devtools)，生成 `.upxs` 与 `SHA256SUMS`，PR 不执行身份打包。
 
@@ -53,6 +53,7 @@
 | **AI 市场** | 内置 300 个开箱即用的角色 —— 润色、审代码、写正则、调 SQL、模拟面试、费曼讲解……点一下就添加 |
 | **多模型接入** | uTools 内置 AI、OpenAI 兼容接口，或任意自定义 API 地址。角色不指定模型时自动跟随全局设置 |
 | **模型清单** | uTools AI 线路会把显示名、是否识图、单次调用的能量消耗一并列出；模型不识图时，添加图片会直接提醒 |
+| **PDF 输入** | 复制 PDF 文件后在聊天框粘贴，也可拖入或选取；粘贴时可选提取文字或按页面图片识别 |
 | **话题回溯** | 每个好友的历史话题独立存档，支持收藏、全文搜索、随时继续 |
 | **全局搜索** | 一个输入框同时搜好友和所有历史话题，直接跳到那次对话 |
 | **一键导出** | 整段会话导出 Markdown / HTML / PDF，单条消息存成 PNG 图片 |
@@ -101,6 +102,8 @@ sh build.sh
 > 地址会自动补全 `/v1/chat/completions`。若你的接口路径特殊，在地址末尾加 `#` 可阻止自动拼接。
 
 > **两条线路的区别**：uTools AI 只接受模型与消息，随机性、核采样、最大回复这些采样参数由 uTools 自己决定，界面上会把它们置灰；想自己调这些参数，走私有 API 路线。两条线路的「上下文数」和「非流输出」都有效。
+
+> PDF 在本地处理后随消息发送：文字模式最多提取前 30000 字；页面图片模式需识图模型，最多 4 页。单个 PDF 最大 20 MB。扫描件没有可提取文字时请选择页面图片模式。
 
 ## 数据与隐私
 

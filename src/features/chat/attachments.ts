@@ -24,20 +24,30 @@ export function isImageFile(file: File | null | undefined): file is File {
   return Boolean(file && typeof file.type === 'string' && file.type.startsWith('image/'));
 }
 
+export function isPdfFile(file: File | null | undefined): file is File {
+  return Boolean(file && (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')));
+}
+
+function filesFromTransfer(data: DataTransfer | null | undefined, accept: (file: File) => boolean): File[] {
+  if (!data) return [];
+  const fromItems = Array.from(data.items || [])
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => Boolean(file && accept(file)));
+  return fromItems.length ? fromItems : Array.from(data.files || []).filter(accept);
+}
+
+export function supportedFilesFromTransfer(data: DataTransfer | null | undefined): File[] {
+  return filesFromTransfer(data, (file) => isImageFile(file) || isPdfFile(file));
+}
+
 /**
  * 从剪贴板或拖放数据里挑出图片文件。
  * @param data 粘贴事件的 `clipboardData` 或拖放事件的 `dataTransfer`。
  * @returns 图片文件列表；没有图片时返回空数组。
  */
 export function imagesFromTransfer(data: DataTransfer | null | undefined): File[] {
-  if (!data) return [];
-  // 同一次粘贴往往同时带着纯文本和 HTML 条目（截图工具尤其如此），只认 kind 为 file 的
-  const fromItems = Array.from(data.items || [])
-    .filter((item) => item.kind === 'file')
-    .map((item) => item.getAsFile())
-    .filter(isImageFile);
-  if (fromItems.length) return fromItems;
-  return Array.from(data.files || []).filter(isImageFile);
+  return filesFromTransfer(data, isImageFile);
 }
 
 /**

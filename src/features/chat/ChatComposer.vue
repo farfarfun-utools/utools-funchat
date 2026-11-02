@@ -4,9 +4,10 @@ import { useDismissable } from '../../composables/use-dismissable.js';
 import { useChatStore } from '../../stores/chat.js';
 import { supportsVision } from '../../services/models.js';
 import ChatPopover from './ChatPopover.vue';
-import { MAX_ATTACHMENTS, imagesFromTransfer, readImageAttachment, transferHasFiles } from './attachments.js';
+import { MAX_ATTACHMENTS, isImageFile, isPdfFile, readImageAttachment, supportedFilesFromTransfer, transferHasFiles } from './attachments.js';
 import type { ImageAttachment } from './attachments.ts';
 import { previewImage } from './image-preview.js';
+import { extractPdfText, renderPdfPages } from './pdf-attachment.js';
 import { IMAGE_TOKEN_ESTIMATE, estimateTokens } from './token-count.js';
 
 // 压缩完成前先占位显示转圈，所以 bytes 要到就绪后才有
@@ -18,6 +19,9 @@ const textarea = ref();
 const root = ref();
 const popup = ref('');
 const picker = ref<HTMLInputElement>();
+const pdfDialog = ref<HTMLDialogElement>();
+const pdfFile = ref<File | null>(null);
+const pdfAttachment = ref<{ id: number; name: string; content: string; loading: boolean; truncated: boolean } | null>(null);
 const attachments = ref<PendingImage[]>([]);
 const dragging = ref(false);
 const notice = ref('');
@@ -26,7 +30,7 @@ let pendingSeed = 0;
 const needsApiSetup = store.needsApiSetup;
 const displayedTokens = computed(() => needsApiSetup.value
   ? 0
-  : store.tokenCount.value + estimateTokens(text.value) + attachments.value.length * IMAGE_TOKEN_ESTIMATE);
+  : store.tokenCount.value + estimateTokens(text.value) + estimateTokens(pdfAttachment.value?.content || '') + attachments.value.length * IMAGE_TOKEN_ESTIMATE);
 // uTools AI 的模型清单会标明每个模型吃不吃图片。确定不支持时才提醒——拿不到清单
 // （私有 API 线路）一律当作支持，不能凭猜测拦住用户的图片。
 const noVision = computed(() => !supportsVision(store.activeModel.value));
@@ -58,12 +62,51 @@ async function addImages(files: File[]) {
   }
 }
 
+function addFiles(files: File[]) {
+  const images = files.filter(isImageFile);
+  if (images.length) void addImages(images);
+  const pdfs = files.filter(isPdfFile);
+  if (!pdfs.length) return;
+  if (pdfs.length > 1 || pdfFile.value || pdfAttachment.value) {
+    warn('一条消息只能添加一份 PDF');
+    return;
+  }
+  pdfFile.value = pdfs[0];
+  void nextTick(() => pdfDialog.value?.showModal());
+}
+
+async function choosePdf(mode: 'text' | 'images') {
+  const file = pdfFile.value;
+  pdfDialog.value?.close();
+  pdfFile.value = null;
+  if (!file) return;
+  const pending = { id: ++pendingSeed, name: file.name, content: '', loading: true, truncated: false };
+  pdfAttachment.value = pending;
+  try {
+    if (mode === 'text') {
+      const result = await extractPdfText(file);
+      if (pdfAttachment.value?.id !== pending.id) return;
+      pdfAttachment.value = { ...pending, ...result, loading: false };
+      if (result.truncated) warn('PDF 较长，仅提取了前 30000 字');
+    } else {
+      if (noVision.value) warn(`${store.activeModel.value} 不识图，请换一个支持识图的模型`);
+      const pages = await renderPdfPages(file, MAX_ATTACHMENTS - attachments.value.length);
+      if (pdfAttachment.value?.id !== pending.id) return;
+      attachments.value = [...attachments.value, ...pages];
+      pdfAttachment.value = null;
+    }
+  } catch (error) {
+    if (pdfAttachment.value?.id === pending.id) pdfAttachment.value = null;
+    warn(error instanceof Error ? error.message : 'PDF 处理失败');
+  }
+}
+
 function paste(event: ClipboardEvent) {
-  const files = imagesFromTransfer(event.clipboardData);
-  // 剪贴板里没有图片时别拦，纯文本粘贴要走浏览器默认行为
+  const files = supportedFilesFromTransfer(event.clipboardData);
+  // 剪贴板里没有支持的文件时，纯文本粘贴仍走浏览器默认行为
   if (!files.length) return;
   event.preventDefault();
-  addImages(files);
+  addFiles(files);
 }
 
 // 只有拖的是文件才接管：拖选中的文字进输入框仍然走浏览器默认行为
@@ -83,14 +126,14 @@ function drop(event: DragEvent) {
   if (!transferHasFiles(event.dataTransfer)) return;
   // 文件拖放一律拦下：非图片文件要是走了默认行为，Electron 会把整个窗口导航到那个文件
   event.preventDefault();
-  const files = imagesFromTransfer(event.dataTransfer);
-  if (files.length) addImages(files);
-  else warn('只支持拖入图片');
+  const files = supportedFilesFromTransfer(event.dataTransfer);
+  if (files.length) addFiles(files);
+  else warn('只支持拖入图片或 PDF');
 }
 
 function pick(event: Event) {
   const input = event.target as HTMLInputElement;
-  addImages(Array.from(input.files || []));
+  addFiles(Array.from(input.files || []));
   // 清空选择，否则连着选同一张图不会再触发 change
   input.value = '';
 }
@@ -102,16 +145,20 @@ function removeImage(id: string) {
 async function submit() {
   const value = text.value;
   const pending = attachments.value;
-  if ((!value.trim() && !pending.length) || store.state.loading || !store.state.currentAgent) return;
-  if (pending.some((item) => item.loading)) {
-    warn('图片还在处理，稍等一下');
+  const pdf = pdfAttachment.value;
+  if ((!value.trim() && !pending.length && !pdf) || store.state.loading || !store.state.currentAgent) return;
+  if (pending.some((item) => item.loading) || pdf?.loading || pdfFile.value) {
+    warn('附件还在处理，稍等一下');
     return;
   }
   text.value = '';
   attachments.value = [];
-  if (!await store.send(value, pending.map((item) => item.url))) {
+  pdfAttachment.value = null;
+  const message = [value.trim(), pdf?.content].filter(Boolean).join('\n\n');
+  if (!await store.send(message, pending.map((item) => item.url))) {
     text.value = value;
     attachments.value = pending;
+    pdfAttachment.value = pdf;
   }
 }
 
@@ -159,23 +206,26 @@ onBeforeUnmount(() => clearTimeout(noticeTimer));
 </script>
 
 <template>
-  <footer ref="root" class="chat-composer" :class="{ 'has-images': attachments.length, dragging }"
+  <footer ref="root" class="chat-composer" :class="{ 'has-images': attachments.length || pdfAttachment, dragging }"
     @dragover="dragOver" @dragleave="dragLeave" @drop="drop">
     <ChatPopover v-if="popup === 'api' || popup === 'params'" :kind="popup" @close="popup = ''" />
+    <dialog ref="pdfDialog" class="pdf-mode-dialog" aria-labelledby="pdf-mode-title" @close="pdfFile = null">
+      <h2 id="pdf-mode-title">如何读取 {{ pdfFile?.name }}</h2>
+      <div class="pdf-mode-actions">
+        <button type="button" @click="choosePdf('text')"><b>提取文字</b><span>适合可选中文字的 PDF</span></button>
+        <button type="button" @click="choosePdf('images')"><b>按页面图片识别</b><span>适合扫描件，需识图模型，最多 4 页</span></button>
+      </div>
+      <button class="pdf-mode-cancel" type="button" @click="pdfDialog?.close()">取消</button>
+    </dialog>
     <!-- 隐藏在布局之外，避免它参与 tool-group 的间距和分隔线计算 -->
-    <input ref="picker" class="image-picker" type="file" accept="image/*" multiple tabindex="-1" aria-hidden="true" @change="pick">
+    <input ref="picker" class="image-picker" type="file" accept="image/*,application/pdf,.pdf" multiple tabindex="-1" aria-hidden="true" @change="pick">
     <div class="composer-tools">
       <div class="tool-group">
         <button v-if="store.state.loading" type="button" title="停止生成" aria-label="停止生成" @click="store.stop">
           <i class="iconfont icon-close" aria-hidden="true"></i>
         </button>
-        <button class="attach-button" type="button" :title="`添加图片（也可直接粘贴或拖入，最多 ${MAX_ATTACHMENTS} 张）`" aria-label="添加图片" @click="picker?.click()">
-          <!-- 图标字体里没有语义明确的图片图标，内联 SVG 保证画出来确实是「图片」 -->
-          <svg class="image-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <rect x="2.25" y="3.25" width="11.5" height="9.5" rx="1.75" stroke="currentColor" stroke-width="1.3" />
-            <circle cx="6" cy="6.6" r="1.05" fill="currentColor" />
-            <path d="M3 11.2 6.1 8.5l2.2 1.9 2.2-2.4 2.5 2.6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
-          </svg>
+        <button class="attach-button" type="button" :title="`添加图片或 PDF（也可直接粘贴或拖入；图片最多 ${MAX_ATTACHMENTS} 张）`" aria-label="添加图片或 PDF" @click="picker?.click()">
+          <i class="iconfont icon-file" aria-hidden="true"></i>
         </button>
       </div>
       <div class="tool-group tool-group-end">
@@ -191,7 +241,13 @@ onBeforeUnmount(() => clearTimeout(noticeTimer));
         </div>
       </div>
     </div>
-    <div v-if="attachments.length" class="attachment-strip">
+    <div v-if="attachments.length || pdfAttachment" class="attachment-strip">
+      <div v-if="pdfAttachment" class="pdf-attachment">
+        <i class="iconfont icon-file" aria-hidden="true"></i>
+        <span :title="pdfAttachment.name">{{ pdfAttachment.name }}</span>
+        <small>{{ pdfAttachment.loading ? '处理中' : pdfAttachment.truncated ? '前 30000 字' : '文字' }}</small>
+        <button type="button" :title="`移除 ${pdfAttachment.name}`" :aria-label="`移除 ${pdfAttachment.name}`" @click="pdfAttachment = null"><i class="iconfont icon-close" aria-hidden="true"></i></button>
+      </div>
       <div v-for="item in attachments" :key="item.id" class="attachment" :class="{ loading: item.loading }">
         <span v-if="item.loading" class="attachment-spinner" role="status" aria-label="图片处理中"></span>
         <button v-else class="attachment-open" type="button" :title="`查看 ${item.name}`" @click="previewImage(item.url)">
@@ -201,9 +257,9 @@ onBeforeUnmount(() => clearTimeout(noticeTimer));
           <i class="iconfont icon-close" aria-hidden="true"></i>
         </button>
       </div>
-      <span class="attachment-hint" :class="{ blocked: noVision }">{{ noVision ? `${store.activeModel.value} 不支持识图` : '图片需所选模型支持识图' }}</span>
+      <span v-if="attachments.length" class="attachment-hint" :class="{ blocked: noVision }">{{ noVision ? `${store.activeModel.value} 不支持识图` : '图片需所选模型支持识图' }}</span>
     </div>
-    <div class="textarea-wrap" @click="textarea?.focus()"><textarea ref="textarea" v-model="text" placeholder="聊点什么吧...（可直接粘贴图片）" spellcheck="false" @keydown="keydown" @paste="paste"></textarea></div>
+    <div class="textarea-wrap" @click="textarea?.focus()"><textarea ref="textarea" v-model="text" placeholder="聊点什么吧...（可粘贴图片或 PDF）" spellcheck="false" @keydown="keydown" @paste="paste"></textarea></div>
     <div class="composer-footer">
       <span v-if="notice" class="composer-notice" role="status">{{ notice }}</span>
       <span class="token-count" :class="{ 'has-token': displayedTokens > 0 }">{{ displayedTokens.toLocaleString() }}</span>
@@ -219,9 +275,24 @@ onBeforeUnmount(() => clearTimeout(noticeTimer));
 .chat-composer.dragging { border-top-color: var(--color-primary); box-shadow: inset 0 0 0 1px var(--color-primary); }
 .image-picker { display: none; }
 .composer-tools .attach-button { display: grid; place-items: center; }
-.image-icon { width: 18px; height: 18px; }
+.composer-tools .attach-button .icon-file { font-size: 18px; }
+.pdf-mode-dialog { width: min(420px, calc(100vw - 32px)); margin: auto; padding: 20px; border: 0; border-radius: 8px; color: var(--color-text-2); background: var(--color-bg-3); box-shadow: 0 12px 35px #0003; }
+.pdf-mode-dialog::backdrop { background: #1d212980; }
+.pdf-mode-dialog h2 { overflow-wrap: anywhere; color: var(--color-text-1); font-size: 16px; line-height: 1.4; }
+.pdf-mode-actions { display: grid; gap: 8px; margin-top: 18px; }
+.pdf-mode-actions button { min-height: 58px; padding: 10px 12px; border: 1px solid var(--color-border-2); border-radius: 6px; background: var(--color-bg-2); text-align: left; }
+.pdf-mode-actions button:hover, .pdf-mode-actions button:focus-visible { border-color: var(--color-primary); }
+.pdf-mode-actions b, .pdf-mode-actions span { display: block; line-height: 1.4; }
+.pdf-mode-actions b { color: var(--color-text-1); }
+.pdf-mode-actions span { margin-top: 3px; color: var(--color-text-3); font-size: 12px; }
+.pdf-mode-cancel { display: block; margin: 16px 0 0 auto; color: var(--color-text-3); }
 .attachment-strip { height: 72px; padding: 0 16px; display: flex; flex: 0 0 72px; align-items: center; gap: 8px; overflow-x: auto; scrollbar-width: none; }
 .attachment-strip::-webkit-scrollbar { height: 0; }
+.pdf-attachment { min-width: 0; max-width: 220px; height: 56px; padding: 7px 8px; display: grid; grid-template-columns: 18px minmax(0, 1fr) 18px; grid-template-rows: 22px 16px; column-gap: 5px; flex: 0 0 180px; align-items: center; border: 1px solid var(--color-border-2); border-radius: 6px; background: var(--color-fill-1); }
+.pdf-attachment > .icon-file { grid-row: 1 / 3; color: var(--color-primary); font-size: 18px; }
+.pdf-attachment > span { overflow: hidden; color: var(--color-text-1); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.pdf-attachment small { grid-column: 2; grid-row: 2; color: var(--color-text-3); font-size: 11px; }
+.pdf-attachment button { grid-column: 3; grid-row: 1; width: 18px; height: 18px; }
 .attachment { position: relative; width: 56px; height: 56px; flex: 0 0 56px; border: 1px solid var(--color-border-2); border-radius: 6px; background: var(--color-fill-1); }
 .attachment-open { width: 100%; height: 100%; display: block; border-radius: 5px; overflow: hidden; cursor: zoom-in; }
 .attachment-open img { width: 100%; height: 100%; display: block; object-fit: cover; }
