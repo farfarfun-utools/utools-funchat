@@ -1,11 +1,7 @@
 言来语往 UPXS 正式版，官方插件项目 ID：`zc8khhsw`。
 
-本版新增图片生成模式：在聊天输入区切换模式、填写描述，即可通过支持 `/images/generations` 的 API 线路生成图片。默认模型为 `gpt-image-1.5`，也可自行填写模型名称。uTools AI 线路暂不提供图片生成接口。
+本版新增 `list_chat_agents` AI/MCP 工具，仅返回角色 ID 和名称，不返回提示词、模型配置、聊天记录或 API 密钥。
 
-只配置官方 API Key、未填写 API 地址时，聊天和图片生成现在都会自动使用官方端点。
-
-生成结果作为图片消息保存在插件的 uTools 文档库中，重开话题仍可查看；删除话题时会清理图片，整库备份也会包含图片数据。备份格式升级到 2，仍可恢复旧版备份。
-
-下载 `utools-funchat-1.0.4.upxs` 后导入 uTools。此包通过 GitHub Actions 构建，使用统一的 `utools-devtools` 生成，并完成认证解密、清单资源、插件 ID 和 ASAR 完整性校验；提供 `SHA256SUMS` 核对下载文件。
+下载 `utools-funchat-1.0.5.upxs` 后导入 uTools。此包通过 GitHub Actions 构建，使用统一的 `utools-devtools` 生成，并完成认证解密、清单资源、插件 ID 和 ASAR 完整性校验；提供 `SHA256SUMS` 核对下载文件。
 
 三个敏感字段由组织 Secrets 注入，仓库只保存公开的项目配置。相同打包链路已由用户在 FunCalc 上实机安装验证；本插件自身的安装和功能仍待实机确认。

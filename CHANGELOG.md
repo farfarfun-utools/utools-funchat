@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.5
+
+- 新增 `list_chat_agents` AI/MCP 工具，只返回角色 ID 和名称，不暴露提示词、模型配置、聊天记录或 API 密钥。
+
 ## 1.0.4
 
 - 新增图片生成模式，支持 OpenAI 兼容的 `/images/generations` 接口和独立图片模型设置。
