@@ -1,6 +1,7 @@
 {
-  "name": "utools-funchat",
-  "version": "1.0.5",
+  "name": "@farfarfun/utools-funchat",
+  "funbuild": { "build": "sh build.sh" },
+  "version": "1.0.6",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@12.10.1",
