@@ -45,6 +45,10 @@
 
 > 图由 `pnpm screenshots` 生成，内容都是为截图造的演示数据，不含任何真实 API Key。
 
+## AI / MCP 工具
+
+`list_chat_agents` 只列出角色 ID 与名称，不返回提示词、模型配置、聊天记录或 API 密钥。需 uTools 8 的工具能力，第三方 Agent 还需由用户开启 uTools MCP 服务。
+
 ## 它能做什么
 
 | | |
