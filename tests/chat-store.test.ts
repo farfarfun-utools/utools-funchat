@@ -53,6 +53,20 @@ test('persists every message instead of only the context window', async () => {
   );
 });
 
+test('persists the rest of a reply after a save during streaming', async () => {
+  await setup();
+  host.ai = async (params, onChunk) => {
+    onChunk({ content: '第一段' });
+    store.persistCurrentConversation();
+    onChunk({ content: '第二段' });
+  };
+
+  await store.send('提问');
+
+  const [history] = await loadHistories();
+  assert.equal((await loadHistoryMessages(history._id)).at(-1)?.content, '第一段第二段');
+});
+
 test('generated image is saved and reopened with its original bytes', async () => {
   await setup();
   store.updateSettings({
