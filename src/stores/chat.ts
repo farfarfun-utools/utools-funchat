@@ -601,7 +601,8 @@ function persistCurrentConversation(): boolean {
     return false;
   }
   state.saveError = '';
-  unsavedMessages = false;
+  // 生成中退出只保存了当前进度，完成或停止时还要写入最终回复。
+  unsavedMessages = state.loading;
   sortAgents();
   return true;
 }
