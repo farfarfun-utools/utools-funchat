@@ -3,6 +3,7 @@ export {};
 declare global {
   // preload.js 往 window 上挂的桥接接口，官方声明里当然没有，要自己写。
   interface Window {
+    onFunchatEnter?: typeof utools.onPluginEnter;
     // 返回值是 preload 真正给的那个：写成功 true，用户在对话框里取消 false。
     // 原来声明成 Promise<void>，于是「取消了没有」这件事在类型上根本看不见。
     saveFile?: (options: unknown, data: unknown, encoding: string) => Promise<boolean>;

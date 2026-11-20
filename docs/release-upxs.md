@@ -1,9 +1,7 @@
-v1.0.7 修复回复生成途中退出插件后，话题历史只保存半截回复的问题。再次打开话题可查看完整生成结果。
+v1.0.8 修复首次启动时从 uTools 超级面板打开 FunChat 却丢失角色和选中文字的问题。选中文字并点击角色后，FunChat 会切换到该角色，开启新话题并自动发送文字。
 
-言来语往 UPXS 正式版，官方插件项目 ID：`zc8khhsw`。
+言来语往 UPXS 正式版，官方插件项目 ID 为 `zc8khhsw`。
 
-此前版本新增 `list_chat_agents` AI/MCP 工具，仅返回角色 ID 和名称，不返回提示词、模型配置、聊天记录或 API 密钥。
+下载 `utools-funchat-1.0.8.upxs` 后导入 uTools。安装包由 GitHub Actions 构建，可用 `SHA256SUMS` 核对下载文件。
 
-下载 `utools-funchat-1.0.7.upxs` 后导入 uTools。此包通过 GitHub Actions 构建，使用统一的 `utools-devtools` 生成，并完成认证解密、清单资源、插件 ID 和 ASAR 完整性校验；提供 `SHA256SUMS` 核对下载文件。
-
-三个敏感字段由组织 Secrets 注入，仓库只保存公开的项目配置。相同打包链路已由用户在 FunCalc 上实机安装验证；本插件自身的安装和功能仍待实机确认。
+超级面板入口已通过自动化回归测试，uTools 桌面端仍待复测。

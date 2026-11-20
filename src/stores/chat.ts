@@ -244,9 +244,8 @@ async function refreshFromSync(): Promise<void> {
 }
 
 function registerHostEvents(): void {
-  // 以前一次都没注册过 onPluginEnter，于是「唤出 uTools → 敲 funchat → 回车 → 直接打字」
-  // 中间凭空多了一次点击输入框；匹配命令（选中文字直接提问）更是无从实现。
-  host.onPluginEnter?.(async (action) => {
+  const onPluginEnter = globalThis.window?.onFunchatEnter ?? host.onPluginEnter?.bind(host);
+  onPluginEnter?.(async (action) => {
     const text = intentTextOf(action);
     const roleEntry = action.code.startsWith(AGENT_FEATURE_PREFIX);
     enterIntent.value = { seq: enterIntent.value.seq + 1, text: roleEntry ? '' : text };

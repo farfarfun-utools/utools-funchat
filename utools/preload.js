@@ -4,6 +4,18 @@ const { fileURLToPath } = require('url');
 let clipboard;
 try { ({ clipboard } = require('electron')); } catch { /* 浏览器预览没有 Electron */ }
 
+// uTools 可能在角色加载完成前触发进入事件。
+const pendingEntries = [];
+let enterHandler;
+globalThis.utools?.onPluginEnter((action) => {
+  if (enterHandler) enterHandler(action);
+  else pendingEntries.push(action);
+});
+window.onFunchatEnter = (callback) => {
+  enterHandler = callback;
+  for (const action of pendingEntries.splice(0)) callback(action);
+};
+
 window.saveFile = async (options, data, encoding = 'utf-8') => {
   const filePath = utools.showSaveDialog(options);
   if (!filePath) return false;

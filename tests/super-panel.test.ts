@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { runInNewContext } from 'node:vm';
 import { agentFormValues } from '../src/features/agents/agent-form.ts';
 import { host } from '../src/services/utools.ts';
 import { useChatStore } from '../src/stores/chat.ts';
@@ -26,6 +29,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
   store.stop();
   host.ai = originalAi;
@@ -135,14 +139,23 @@ test('registration errors are visible without blocking startup', async () => {
   assert.match(store.state.error, /超级面板入口更新失败.*host unavailable/);
 });
 
-test('a cold-start entry waits for saved roles to load before sending', async () => {
-  let sending;
-  host.onPluginEnter.mockImplementation((callback) => { sending = callback(action()); });
+test('preload delivers the cold-start selection after roles load and forwards later entries', async () => {
+  const window = {};
+  const preload = readFileSync(new URL('../utools/preload.js', import.meta.url), 'utf8');
+  host.onPluginEnter.mockReset().mockImplementation((callback) => { entered = callback; });
+  runInNewContext(preload, { window, utools: host, require: createRequire(import.meta.url) });
+  assert.equal(host.onPluginEnter.mock.calls.length, 1);
+  await entered(action());
   store.state.agents = [];
   store.state.currentAgent = null;
+  vi.stubGlobal('window', window);
   await store.init();
-  await sending;
+  await vi.waitFor(() => assert.equal(store.state.messages.at(-1)?.content, '你好'));
   assert.equal(store.state.currentAgent._id, 'ai@translator');
+  assert.equal(store.state.messages[0].content, 'Hello');
   assert.equal(host.ai.mock.calls.length, 1);
-  assert.equal(store.state.messages.at(-1).content, '你好');
+  assert.equal(host.onPluginEnter.mock.calls.length, 1);
+  await entered(action('稍后选中的文字', 'funchat-over'));
+  assert.equal(store.enterIntent.value.text, '稍后选中的文字');
+  assert.equal(host.ai.mock.calls.length, 1);
 });
