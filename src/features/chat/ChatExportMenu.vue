@@ -13,6 +13,26 @@ const open = ref(false);
 const closing = ref(false);
 let closeTimer: ReturnType<typeof setTimeout> | undefined;
 let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+let printCleanup: (() => void) | undefined;
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/gu, '&amp;')
+    .replace(/</gu, '&lt;')
+    .replace(/>/gu, '&gt;')
+    .replace(/"/gu, '&quot;')
+    .replace(/'/gu, '&#39;');
+}
+
+function sanitizeFilename(value: unknown, fallback = 'AI'): string {
+  const cleaned = String(value ?? '')
+    .replace(/\.\.+/gu, '_')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[/\\:*?"<>|\u0000-\u001f]/gu, '_')
+    .trim()
+    .replace(/[. ]+$/u, '');
+  return cleaned || fallback;
+}
 
 const items = [
   { label: '一键复制', value: 'copy', icon: 'copy' },
@@ -31,7 +51,8 @@ const markdown = computed(() => store.state.messages.map((message) => {
 
 function filename(extension: string): string {
   const now = new Date();
-  return `${store.state.currentAgent?.nickname || 'AI'}_${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${now.getHours()}-${now.getMinutes()}.${extension}`;
+  const base = sanitizeFilename(store.state.currentAgent?.nickname, 'AI');
+  return `${base}_${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}-${now.getHours()}-${now.getMinutes()}.${extension}`;
 }
 
 function openMenu() {
@@ -60,7 +81,8 @@ function toggleMenu() {
 
 function htmlDocument() {
   const body = renderMarkdown(markdown.value);
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>${store.state.currentAgent?.nickname || 'AI'} 对话</title><style>body{max-width:860px;margin:40px auto;padding:0 24px;color:#374151;font:14px/1.8 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}pre{padding:14px;overflow:auto;color:#e8eaed;background:#282c34;border-radius:5px}img{max-width:100%}table{border-collapse:collapse}th,td{padding:6px 10px;border:1px solid #e5e6eb}</style></head><body>${body}</body></html>`;
+  const title = escapeHtml(store.state.currentAgent?.nickname || 'AI');
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><title>${title} 对话</title><style>body{max-width:860px;margin:40px auto;padding:0 24px;color:#374151;font:14px/1.8 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif}pre{padding:14px;overflow:auto;color:#e8eaed;background:#282c34;border-radius:5px}img{max-width:100%}table{border-collapse:collapse}th,td{padding:6px 10px;border:1px solid #e5e6eb}</style></head><body>${body}</body></html>`;
 }
 
 // Word 认这组 office 命名空间：带上它，打开的是一份排好版的 Word 文档而不是一张网页
@@ -85,12 +107,26 @@ async function save(content: string, extension: string, type: string) {
 }
 
 function printPdf() {
+  printCleanup?.();
   const frame = document.createElement('iframe');
   frame.hidden = true;
+  let cleaned = false;
+  let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    clearTimeout(fallbackTimer);
+    frame.remove();
+    if (printCleanup === cleanup) printCleanup = undefined;
+  };
+  printCleanup = cleanup;
   frame.srcdoc = htmlDocument();
   frame.onload = () => {
-    frame.contentWindow?.print();
-    setTimeout(() => frame.remove(), 1000);
+    const win = frame.contentWindow;
+    win?.addEventListener?.('afterprint', cleanup, { once: true });
+    // 打印对话框可能停留较久，兜底超时放宽到 60 秒
+    fallbackTimer = setTimeout(cleanup, 60_000);
+    win?.print();
   };
   document.body.append(frame);
 }
@@ -100,7 +136,7 @@ async function select(value: string) {
   if (value === 'copy') await host.copyText(markdown.value.replace(/\*\*(.*?)：\*\*/gu, '$1：'));
   // 消息区还没挂载时 querySelector 会是 null，直接跳过而不是把 null 丢给 html2canvas
   const messages = value === 'image' ? document.querySelector<HTMLElement>('.messages-content') : null;
-  if (messages) await withAllExpanded(() => saveElementImage(messages, store.state.currentAgent?.nickname || 'chat'));
+  if (messages) await withAllExpanded(() => saveElementImage(messages, sanitizeFilename(store.state.currentAgent?.nickname, 'chat')));
   if (value === 'markdown') await save(markdown.value, 'md', 'text/markdown;charset=utf-8');
   if (value === 'html') await save(htmlDocument(), 'html', 'text/html;charset=utf-8');
   // 导出的其实是一份 HTML，不是 OOXML。以前它叫 .docx——Word 看到扩展名和内容对不上会
@@ -115,6 +151,7 @@ useDismissable(root, () => open.value, closeMenu);
 onBeforeUnmount(() => {
   clearTimeout(hoverTimer);
   clearTimeout(closeTimer);
+  printCleanup?.();
 });
 </script>
 

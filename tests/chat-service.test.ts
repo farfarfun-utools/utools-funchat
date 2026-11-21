@@ -185,3 +185,43 @@ test('aborts an in-flight uTools AI request when the signal fires', async () => 
   }
   assert.equal(aborted, true);
 });
+
+test('closes an unclosed thinking block when uTools AI stream ends or fails without content', async () => {
+  const originalAi = host.ai;
+  let received = '';
+  host.ai = (_params, onChunk) => {
+    onChunk?.({ reasoning_content: '思考中' });
+    return Promise.resolve();
+  };
+  try {
+    await streamChat({
+      settings: { provider: 'utools' },
+      agent: { params: {} },
+      messages: [],
+      onDelta: (chunk) => { received += chunk; },
+    });
+    assert.equal(received, ':::thinking\n思考中\n:::\n');
+  } finally {
+    host.ai = originalAi;
+  }
+
+  let abortedReceived = '';
+  host.ai = (_params, onChunk) => {
+    onChunk?.({ reasoning_content: '半截思考' });
+    return Promise.reject(new Error('aborted'));
+  };
+  try {
+    await assert.rejects(
+      streamChat({
+        settings: { provider: 'utools' },
+        agent: { params: {} },
+        messages: [],
+        onDelta: (chunk) => { abortedReceived += chunk; },
+      }),
+      /aborted/u,
+    );
+    assert.equal(abortedReceived, ':::thinking\n半截思考\n:::\n');
+  } finally {
+    host.ai = originalAi;
+  }
+});

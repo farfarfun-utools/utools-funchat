@@ -4,7 +4,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default [
-  { ignores: ['utools/dist/**', 'node_modules/**'] },
+  { ignores: ['utools/dist/**', 'node_modules/**', 'coverage/**'] },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   ...vue.configs['flat/recommended'],

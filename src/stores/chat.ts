@@ -631,11 +631,16 @@ function deleteHistory(history: History): void {
 
 function toggleFavorite(history: History): void {
   // 只动收藏位，正文一个字都不用重写
-  upsertHistory(saveHistory({
-    id: history._id,
-    title: history.title || '',
-    favorite: !history.isFavorite,
-  }));
+  try {
+    upsertHistory(saveHistory({
+      id: history._id,
+      title: history.title || '',
+      favorite: !history.isFavorite,
+    }));
+    state.saveError = '';
+  } catch (error) {
+    state.saveError = error instanceof Error ? error.message : '收藏状态保存失败';
+  }
 }
 
 function deleteMessage(index: number): void {

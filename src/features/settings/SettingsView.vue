@@ -35,15 +35,22 @@ function savePreferences() {
   store.updateSettings({ ...preferences });
 }
 
+const modelStatus = ref('');
+
 function replaceModels() {
   const model = targetModel.value.trim();
   if (!model || !selectedAgents.value.length) return;
-  for (const agent of targetAgents.value) {
-    agent.params = { ...agent.params, model };
-    saveAgent(agent);
+  modelStatus.value = '';
+  try {
+    for (const agent of targetAgents.value) {
+      agent.params = { ...agent.params, model };
+      saveAgent(agent);
+    }
+    selectedAgents.value = [];
+    targetModel.value = '';
+  } catch (error) {
+    modelStatus.value = error instanceof Error ? error.message : '批量替换模型失败';
   }
-  selectedAgents.value = [];
-  targetModel.value = '';
 }
 
 const confirmDialog = ref<InstanceType<typeof ConfirmDialog>>();
@@ -85,8 +92,10 @@ async function exportBackup() {
 
     const href = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
     downloadInBrowser(filename, href);
-    URL.revokeObjectURL(href);
+    setTimeout(() => URL.revokeObjectURL(href), 1000);
     backupStatus.value = `已导出 ${backup.documents.length} 条数据`;
+  } catch (error) {
+    backupStatus.value = error instanceof Error ? error.message : '导出备份失败';
   } finally {
     backupBusy.value = false;
   }
@@ -95,8 +104,12 @@ async function exportBackup() {
 /** 走原生对话框；没有 preload（浏览器里调试）时退回 <input type="file">。 */
 async function chooseBackup() {
   if (typeof window.openTextFile !== 'function') return restoreInput.value?.click();
-  const content = await window.openTextFile({ filters: [{ name: 'JSON', extensions: ['json'] }] });
-  if (typeof content === 'string') await restoreBackup(content);
+  try {
+    const content = await window.openTextFile({ filters: [{ name: 'JSON', extensions: ['json'] }] });
+    if (typeof content === 'string') await restoreBackup(content);
+  } catch (error) {
+    backupStatus.value = error instanceof Error ? error.message : '读取备份文件失败';
+  }
 }
 
 async function readPickedFile(event: Event) {
@@ -104,7 +117,12 @@ async function readPickedFile(event: Event) {
   const file = input.files?.[0];
   // 清空 value：同一个文件连选两次也要能触发 change
   input.value = '';
-  if (file) await restoreBackup(await file.text());
+  if (!file) return;
+  try {
+    await restoreBackup(await file.text());
+  } catch (error) {
+    backupStatus.value = error instanceof Error ? error.message : '读取备份文件失败';
+  }
 }
 
 async function restoreBackup(content: string) {
@@ -178,6 +196,7 @@ async function restoreBackup(content: string) {
           </div>
         </div>
         <button class="replace-button" type="button" @click="replaceModels"><i class="iconfont icon-refresh" aria-hidden="true"></i>一键批量替换模型</button>
+        <p v-if="modelStatus" class="backup-status">{{ modelStatus }}</p>
         <div class="instructions"><p>使用说明：</p><p>1、在左侧点击需要替换的好友到右侧。</p><p>2、在右侧选择目标模型。</p><p>3、点击“一键替换”按钮进行批量替换模型。</p></div>
       </div>
     </section>

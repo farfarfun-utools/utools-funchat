@@ -229,6 +229,32 @@ test('a failed body write does not report the conversation as saved', () => {
   }
 });
 
+test('caps searchText length and rolls back newly written image chunks on save failure', async () => {
+  resetDatabase();
+  const longText = '长'.repeat(25_000);
+  saveHistory({ id: 'chat@ai@1#1000', title: '长对话', messages: [{ role: 'user', content: longText }] });
+  const [history] = await loadHistories();
+  assert.equal(history.searchText.length, 16_000);
+
+  const original = host.db.put;
+  host.db.put = (document) => document._id.startsWith('chatbody@')
+    ? { error: true, message: 'quota exceeded' }
+    : original(document);
+  try {
+    assert.throws(() => saveHistory({
+      id: 'chat@ai@1#2000',
+      title: '失败的图片',
+      messages: [
+        { role: 'user', content: '画图' },
+        { role: 'assistant', content: [{ type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' }, imageRef: 'img-fail' }] },
+      ],
+    }), /quota exceeded/);
+    assert.deepEqual(host.db.allDocs('image@ai@1#2000#'), [], '正文写入失败时新写入的图片分块应回滚清理');
+  } finally {
+    host.db.put = original;
+  }
+});
+
 /* ---------- 0.1.x 单键存储的搬迁 ---------- */
 
 function stageLegacyBlob(documents) {

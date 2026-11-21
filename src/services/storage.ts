@@ -20,6 +20,7 @@ const HISTORY_PREFIX = 'chat@';
 const HISTORY_BODY_PREFIX = 'chatbody@';
 const IMAGE_PREFIX = 'image@';
 const IMAGE_CHUNK_SIZE = 700_000;
+const MAX_SEARCH_TEXT_LENGTH = 16_000;
 
 export type { StorageDocument } from './utools.ts';
 export type { ApiRoute, Settings, HistoryInput } from '../types.ts';
@@ -124,23 +125,32 @@ function imagePrefixOf(id: string): string {
   return `${IMAGE_PREFIX}${id.slice(HISTORY_PREFIX.length)}#`;
 }
 
-function saveGeneratedImages(id: string, messages: ChatMessage[]): ChatMessage[] {
+function saveGeneratedImages(id: string, messages: ChatMessage[]): { messages: ChatMessage[]; createdChunkIds: string[] } {
   const next = clonePlain(messages);
-  for (const message of next) {
-    for (const part of Array.isArray(message.content) ? message.content : []) {
-      const ref = part.imageRef;
-      const url = part.image_url?.url;
-      if (!ref || !url) continue;
-      if (!/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/u.test(url)) throw new Error('生成图片数据格式无效');
-      if (url.length > 20 * 1024 * 1024) throw new Error('生成图片超过 20 MB，无法保存');
-      for (let index = 0; index * IMAGE_CHUNK_SIZE < url.length; index += 1) {
-        const chunkId = `${imagePrefixOf(id)}${ref}#${index}`;
-        if (!host.db.get(chunkId)) putDocument({ _id: chunkId, data: url.slice(index * IMAGE_CHUNK_SIZE, (index + 1) * IMAGE_CHUNK_SIZE) });
+  const createdChunkIds: string[] = [];
+  try {
+    for (const message of next) {
+      for (const part of Array.isArray(message.content) ? message.content : []) {
+        const ref = part.imageRef;
+        const url = part.image_url?.url;
+        if (!ref || !url) continue;
+        if (!/^data:image\/(?:png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/u.test(url)) throw new Error('生成图片数据格式无效');
+        if (url.length > 20 * 1024 * 1024) throw new Error('生成图片超过 20 MB，无法保存');
+        for (let index = 0; index * IMAGE_CHUNK_SIZE < url.length; index += 1) {
+          const chunkId = `${imagePrefixOf(id)}${ref}#${index}`;
+          if (!host.db.get(chunkId)) {
+            putDocument({ _id: chunkId, data: url.slice(index * IMAGE_CHUNK_SIZE, (index + 1) * IMAGE_CHUNK_SIZE) });
+            createdChunkIds.push(chunkId);
+          }
+        }
+        part.image_url!.url = '';
       }
-      part.image_url!.url = '';
     }
+  } catch (error) {
+    for (const chunkId of createdChunkIds) removeDocument(chunkId);
+    throw error;
   }
-  return next;
+  return { messages: next, createdChunkIds };
 }
 
 function removeUnusedImages(id: string, messages: ChatMessage[]): void {
@@ -156,10 +166,11 @@ function removeUnusedImages(id: string, messages: ChatMessage[]): void {
 // 正文搬走之后，列表上还要显示的 Token 数、以及搜索要用的正文文本，都得在落盘时先算好。
 // searchText 是另存了一份纯文本，图片不计入，所以它比正文小一两个数量级——
 // 代价是文字部分在库里存了两遍，换来的是搜索不必为了找一个词把所有会话的图片读回来。
+// 上限避免带大段 PDF/长文本的会话撑爆 chat@ 索引文档的 1MB 限制。
 function summarize(messages: ChatMessage[]): { tokens: number; searchText: string } {
   return {
     tokens: estimateConversationTokens(messages),
-    searchText: messages.map((message) => messageText(message)).join(' '),
+    searchText: messages.map((message) => messageText(message)).join(' ').slice(0, MAX_SEARCH_TEXT_LENGTH),
   };
 }
 
@@ -256,19 +267,27 @@ export function saveHistory({ id, title, messages, favorite = false }: HistoryIn
   const document: StorageDocument = splitLegacyBody(host.db.get(id) || { _id: id });
   const now = new Date().toLocaleString('zh-CN', { hour12: false });
   document.title = title;
-  if (messages) {
-    const body = stripImagesToFit(saveGeneratedImages(id, messages));
-    const stored = host.db.get(bodyIdOf(id)) || { _id: bodyIdOf(id) };
-    stored.messages = body;
-    putDocument(stored);
-    Object.assign(document, summarize(body));
+  let createdChunkIds: string[] = [];
+  try {
+    if (messages) {
+      const savedImages = saveGeneratedImages(id, messages);
+      createdChunkIds = savedImages.createdChunkIds;
+      const body = stripImagesToFit(savedImages.messages);
+      const stored = host.db.get(bodyIdOf(id)) || { _id: bodyIdOf(id) };
+      stored.messages = body;
+      putDocument(stored);
+      Object.assign(document, summarize(body));
+    }
+    document.createdDate ||= now;
+    document.updatedDate = now;
+    document.updatedAt = Date.now();
+    document.isFavorite = favorite;
+    const result = putDocument(document);
+    if (result?.rev) document._rev = result.rev;
+  } catch (error) {
+    for (const chunkId of createdChunkIds) removeDocument(chunkId);
+    throw error;
   }
-  document.createdDate ||= now;
-  document.updatedDate = now;
-  document.updatedAt = Date.now();
-  document.isFavorite = favorite;
-  const result = putDocument(document);
-  if (result?.rev) document._rev = result.rev;
   if (messages) removeUnusedImages(id, messages);
   return toHistory(document);
 }

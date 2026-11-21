@@ -108,9 +108,16 @@ export function parseBackup(text: string): ParsedBackup | null {
   }
   if (!isPlainObject(raw)) return null;
   // funchat 这个键同时起到「是不是本插件的备份」的作用：别的 JSON 不会有它。
-  if (typeof raw.funchat !== 'number' || raw.funchat > BACKUP_VERSION) return null;
+  if (!Number.isInteger(raw.funchat) || (raw.funchat as number) < 1 || (raw.funchat as number) > BACKUP_VERSION) return null;
   if (!isPlainObject(raw.settings)) return null;
   if (!Array.isArray(raw.documents)) return null;
+
+  const settings = clonePlain(raw.settings) as Settings;
+  if (settings.apiRoutes !== undefined) {
+    settings.apiRoutes = Array.isArray(settings.apiRoutes)
+      ? settings.apiRoutes.filter((route) => isPlainObject(route))
+      : [];
+  }
 
   const documents = raw.documents.filter(isBackupDocument).map((document) => {
     const copy = clonePlain(document);
@@ -120,9 +127,9 @@ export function parseBackup(text: string): ParsedBackup | null {
 
   return {
     backup: {
-      funchat: raw.funchat,
+      funchat: raw.funchat as number,
       exportedAt: typeof raw.exportedAt === 'number' ? raw.exportedAt : 0,
-      settings: raw.settings as Settings,
+      settings,
       documents,
     },
     dropped: raw.documents.length - documents.length,

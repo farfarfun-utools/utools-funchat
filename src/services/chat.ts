@@ -121,7 +121,14 @@ async function useUtoolsAi(ai: AiInvoker, params: ChatParams, stream: boolean, o
     }
   });
   bindAbort(pending, signal);
-  await pending;
+  try {
+    await pending;
+  } finally {
+    if (thinking) {
+      onDelta('\n:::\n');
+      thinking = false;
+    }
+  }
 }
 
 /**

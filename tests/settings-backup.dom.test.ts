@@ -129,3 +129,19 @@ test('选到不是备份的文件：直接说清楚，而不是弹确认框问�
   assert.match(wrapper.find('.backup-status').text(), /不是 FunChat 备份/);
   assert.equal(host.db.get('ai@1')?.nickname, '小助手');
 });
+
+test('导出或读取备份文件抛错时会展示错误提示', async () => {
+  await setup();
+  window.saveFile = async () => { throw new Error('磁盘只读'); };
+  const wrapper = mount(SettingsView);
+  await findButton(wrapper, '导出备份').trigger('click');
+  await wrapper.vm.$nextTick();
+  await confirmDialog(wrapper, true);
+  assert.match(wrapper.find('.backup-status').text(), /磁盘只读/);
+
+  window.openTextFile = async () => { throw new Error('无权限读取'); };
+  await findButton(wrapper, '恢复备份').trigger('click');
+  await new Promise((resolve) => setTimeout(resolve));
+  await wrapper.vm.$nextTick();
+  assert.match(wrapper.find('.backup-status').text(), /无权限读取/);
+});

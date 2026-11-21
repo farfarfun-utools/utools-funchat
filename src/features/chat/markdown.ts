@@ -33,10 +33,71 @@ DOMPurify.addHook('afterSanitizeAttributes', (node: Element) => {
 
 // 真正需要内联 style 的只有 KaTeX——它靠 style 摆字形的高度和位置，删了公式就散架。
 // 可 style 出现在别处就是个洞：模型回复里一句 <span style="position:fixed;inset:0;z-index:9">
-// 就能糊住整个界面冒充插件 UI。所以只认公式这一处，其余一律丢掉。
+// 就能糊住整个界面冒充插件 UI；甚至给假节点挂上 class="katex" 也能绕过单纯的祖先判断。
+// 所以除校验位于 .katex/.katex-display 内之外，还只放行 KaTeX 排版真正用到的安全属性，
+// 禁止 position/z-index/inset/display/pointer-events 以及 url()/expression() 等外链/脚本值。
+const KATEX_SAFE_STYLE_PROPS = new Set([
+  'height',
+  'width',
+  'min-width',
+  'max-width',
+  'top',
+  'right',
+  'bottom',
+  'left',
+  'margin',
+  'margin-top',
+  'margin-right',
+  'margin-bottom',
+  'margin-left',
+  'padding',
+  'padding-top',
+  'padding-right',
+  'padding-bottom',
+  'padding-left',
+  'border',
+  'border-width',
+  'border-top-width',
+  'border-right-width',
+  'border-bottom-width',
+  'border-left-width',
+  'border-color',
+  'border-style',
+  'vertical-align',
+  'font-size',
+  'color',
+  'background-color',
+]);
+
+const UNSAFE_STYLE_VALUE = /(?:url\s*\(|expression\s*\(|image-set\s*\(|@import|javascript:|\\|\/\*)/iu;
+
+function sanitizeKatexStyle(style: string): string {
+  const kept: string[] = [];
+  for (const part of style.split(';')) {
+    const colon = part.indexOf(':');
+    if (colon <= 0) continue;
+    const prop = part.slice(0, colon).trim().toLowerCase();
+    const val = part.slice(colon + 1).trim();
+    if (!KATEX_SAFE_STYLE_PROPS.has(prop)) continue;
+    if (!val || UNSAFE_STYLE_VALUE.test(val)) continue;
+    kept.push(`${prop}:${val}`);
+  }
+  return kept.join(';');
+}
+
 DOMPurify.addHook('uponSanitizeAttribute', (node: Element, data) => {
   if (data.attrName !== 'style') return;
-  data.keepAttr = Boolean(node.closest?.('.katex, .katex-display'));
+  if (!node.closest?.('.katex, .katex-display')) {
+    data.keepAttr = false;
+    return;
+  }
+  const cleaned = sanitizeKatexStyle(data.attrValue || '');
+  if (!cleaned) {
+    data.keepAttr = false;
+    return;
+  }
+  data.attrValue = cleaned;
+  data.keepAttr = true;
 });
 
 type MathToken = { type: string; raw: string; expression: string; display?: boolean };

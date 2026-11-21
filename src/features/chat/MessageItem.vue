@@ -29,6 +29,8 @@ const RENDER_INTERVAL = 80;
 const source = ref(messageText(props.message));
 let lastRender = 0;
 let pending: ReturnType<typeof setTimeout> | null = null;
+let copyTimer: ReturnType<typeof setTimeout> | null = null;
+let imageCopyTimer: ReturnType<typeof setTimeout> | null = null;
 
 watch(() => messageText(props.message), (value) => {
   const wait = RENDER_INTERVAL - (Date.now() - lastRender);
@@ -47,7 +49,11 @@ watch(() => messageText(props.message), (value) => {
   source.value = value;
 });
 
-onBeforeUnmount(() => { if (pending) clearTimeout(pending); });
+onBeforeUnmount(() => {
+  if (pending) clearTimeout(pending);
+  if (copyTimer) clearTimeout(copyTimer);
+  if (imageCopyTimer) clearTimeout(imageCopyTimer);
+});
 
 const long = computed(() => isLongMessage(source.value));
 const collapsed = ref(long.value);
@@ -68,7 +74,8 @@ function openLink(event: MouseEvent) {
 async function copy() {
   await host.copyText(messageText(props.message));
   copied.value = true;
-  setTimeout(() => { copied.value = false; }, 1000);
+  if (copyTimer) clearTimeout(copyTimer);
+  copyTimer = setTimeout(() => { copied.value = false; copyTimer = null; }, 1000);
 }
 
 // 出图前必须先展开，否则折叠的长消息只会截到一半
@@ -93,7 +100,8 @@ async function copyImage() {
   await withExpanded(async () => {
     await copyElementImage(body.value);
     imageCopied.value = true;
-    setTimeout(() => { imageCopied.value = false; }, 1000);
+    if (imageCopyTimer) clearTimeout(imageCopyTimer);
+    imageCopyTimer = setTimeout(() => { imageCopied.value = false; imageCopyTimer = null; }, 1000);
   });
 }
 </script>

@@ -24,6 +24,25 @@ test('公式里的 style 要留着，否则 KaTeX 的排版就散了', () => {
   assert.ok(html.includes('height:1.2em'), `公式内部的 style 应当保留，实际是 ${html}`);
 });
 
+test('伪装成 katex 的节点不能借机保留危险内联样式', () => {
+  const html = renderMarkdown(
+    '<div class="katex" style="position:fixed;inset:0;z-index:999;display:none;pointer-events:none;background-color:url(https://evil.example/x);height:1.5em">伪装界面</div>',
+  );
+  assert.ok(html.includes('伪装界面'));
+  assert.ok(html.includes('height:1.5em'), `安全排版属性可保留，实际是 ${html}`);
+  assert.ok(!html.includes('position'), `position 应被剥离，实际是 ${html}`);
+  assert.ok(!html.includes('inset'), `inset 应被剥离，实际是 ${html}`);
+  assert.ok(!html.includes('z-index'), `z-index 应被剥离，实际是 ${html}`);
+  assert.ok(!html.includes('display'), `display 应被剥离，实际是 ${html}`);
+  assert.ok(!html.includes('pointer-events'), `pointer-events 应被剥离，实际是 ${html}`);
+  assert.ok(!html.includes('url('), `url() 应被剥离，实际是 ${html}`);
+});
+
+test('伪装成 katex 且只含危险样式时整条 style 属性都会被移除', () => {
+  const html = renderMarkdown('<div class="katex-display" style="position:fixed;inset:0;z-index:99">遮罩</div>');
+  assert.ok(!html.includes('style='), `不含安全属性时 style 应当被移除，实际是 ${html}`);
+});
+
 test('链接一律在外部浏览器打开，且带上 noopener', () => {
   const html = renderMarkdown('[去看看](https://example.com)');
   assert.ok(html.includes('target="_blank"'));

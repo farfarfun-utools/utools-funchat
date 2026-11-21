@@ -115,8 +115,25 @@ test('rejects files that are not a FunChat backup, and newer formats', () => {
   assert.equal(parseBackup('{"hello":1}'), null, '没有 funchat 字段的 JSON 不该被当成备份');
   // 比我们认识的格式新：宁可报错，也不要按旧字段猜新结构后「恢复成功但东西不对」
   assert.equal(parseBackup(JSON.stringify({ funchat: BACKUP_VERSION + 1, settings: {}, documents: [] })), null);
+  assert.equal(parseBackup(JSON.stringify({ funchat: 0, settings: {}, documents: [] })), null, '版本号小于 1 应拒绝');
+  assert.equal(parseBackup(JSON.stringify({ funchat: -1, settings: {}, documents: [] })), null, '负版本号应拒绝');
+  assert.equal(parseBackup(JSON.stringify({ funchat: 1.5, settings: {}, documents: [] })), null, '非整数版本号应拒绝');
   assert.equal(parseBackup(JSON.stringify({ funchat: 1, documents: [] })), null, '缺 settings 不该通过');
   assert.equal(parseBackup(JSON.stringify({ funchat: 1, settings: {} })), null, '缺 documents 不该通过');
+});
+
+test('filters out non-object entries in settings.apiRoutes', () => {
+  const parsed = parseBackup(JSON.stringify({
+    funchat: 1,
+    exportedAt: 1,
+    settings: {
+      apiRoutes: [null, 'bad', 123, ['array'], { id: 'r1', name: '有效线路', provider: 'openai' }],
+    },
+    documents: [],
+  }));
+  assert.ok(parsed);
+  assert.equal(parsed.backup.settings.apiRoutes?.length, 1);
+  assert.equal(parsed.backup.settings.apiRoutes?.[0]?.id, 'r1');
 });
 
 test('drops unrecognised entries one by one instead of failing the whole file', () => {

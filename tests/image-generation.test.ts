@@ -67,3 +67,40 @@ test('downloads URL responses before keeping them in a conversation', async () =
     globalThis.fetch = original;
   }
 });
+
+test('handles non-JSON HTTP errors, disallowed image MIME types, and oversized images', async () => {
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response('<html>502 Bad Gateway</html>', { status: 502, headers: { 'Content-Type': 'text/html' } });
+    await assert.rejects(
+      generateImage('图', { provider: 'openai', baseUrl: 'https://api.example.com' }),
+      /502 Bad Gateway/u,
+    );
+
+    let call = 0;
+    globalThis.fetch = async () => {
+      call += 1;
+      return call === 1
+        ? new Response(JSON.stringify({ data: [{ url: 'https://images.example.com/bad.svg' }] }), { headers: { 'Content-Type': 'application/json' } })
+        : new Response('<svg></svg>', { headers: { 'Content-Type': 'image/svg+xml' } });
+    };
+    await assert.rejects(
+      generateImage('图', { provider: 'openai', baseUrl: 'https://api.example.com' }),
+      /受支持的图片文件/u,
+    );
+
+    call = 0;
+    globalThis.fetch = async () => {
+      call += 1;
+      return call === 1
+        ? new Response(JSON.stringify({ data: [{ url: 'https://images.example.com/huge.png' }] }), { headers: { 'Content-Type': 'application/json' } })
+        : new Response(new Uint8Array([1]), { headers: { 'Content-Type': 'image/png', 'Content-Length': String(21 * 1024 * 1024) } });
+    };
+    await assert.rejects(
+      generateImage('图', { provider: 'openai', baseUrl: 'https://api.example.com' }),
+      /20 MB/u,
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+});
