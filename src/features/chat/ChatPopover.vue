@@ -266,7 +266,7 @@ function saveParams() {
 </template>
 
 <style scoped>
-.chat-popover { position: absolute; z-index: 80; right: 0; bottom: calc(var(--composer-height, 160px) - 1px); max-width: 100%; max-height: calc(100dvh - var(--composer-height, 160px) - 12px); color: var(--color-text-2); background: var(--color-bg-2); border: 1px solid var(--color-border-2); border-radius: 8px 0 0 8px; box-shadow: 0 4px 10px #0000001a; line-height: 22px; }
+.chat-popover { position: absolute; z-index: 80; right: 16px; bottom: calc(var(--composer-height, 138px) + 2px); max-width: calc(100% - 32px); max-height: calc(100dvh - var(--composer-height, 138px) - 16px); color: var(--color-text-2); background: var(--color-bg-2); border: 1px solid var(--color-border-2); border-radius: 12px; box-shadow: 0 10px 32px rgba(0, 0, 0, 0.16); line-height: 22px; }
 .api-popover { width: 620px; height: 378px; display: flex; flex-direction: column; }
 .api-tabs { height: 44px; padding: 0 8px; display: flex; flex: 0 0 44px; align-items: stretch; border-bottom: 1px solid var(--color-border-2); }
 .api-tabs button { position: relative; height: 40px; margin: 0 10px; color: var(--color-text-1); }
@@ -342,6 +342,7 @@ function saveParams() {
 .model-browse .iconfont { font-size: 14px; }
 .model-control > small { display: block; margin-top: 6px; color: var(--color-text-3); font-size: 12px; }
 @media (max-width: 600px) {
+  .chat-popover { right: 8px; max-width: calc(100% - 16px); }
   .api-popover { height: 460px; }
   .route-layout { flex-direction: column; }
   .route-list { width: 100%; max-height: 100px; flex: 0 0 auto; border-right: 0; border-bottom: 1px solid var(--color-border-2); }

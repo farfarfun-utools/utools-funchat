@@ -35,6 +35,11 @@ const displayedTokens = computed(() => needsApiSetup.value
 // uTools AI 的模型清单会标明每个模型吃不吃图片。确定不支持时才提醒——拿不到清单
 // （私有 API 线路）一律当作支持，不能凭猜测拦住用户的图片。
 const noVision = computed(() => !supportsVision(store.activeModel.value));
+const canSend = computed(() => Boolean(
+  !store.state.loading
+  && store.state.currentAgent
+  && (text.value.trim() || attachments.value.length || pdfAttachment.value),
+));
 
 function warn(message: string) {
   notice.value = message;
@@ -236,95 +241,151 @@ onBeforeUnmount(() => clearTimeout(noticeTimer));
     </dialog>
     <!-- 隐藏在布局之外，避免它参与 tool-group 的间距和分隔线计算 -->
     <input ref="picker" class="image-picker" type="file" accept="image/*,application/pdf,.pdf" multiple tabindex="-1" aria-hidden="true" @change="pick">
-    <div class="composer-tools">
-      <div class="tool-group">
-        <button v-if="store.state.loading" type="button" title="停止生成" aria-label="停止生成" @click="store.stop">
-          <i class="iconfont icon-close" aria-hidden="true"></i>
-        </button>
-        <button class="attach-button" type="button" :title="`添加图片或 PDF（也可直接粘贴或拖入；图片最多 ${MAX_ATTACHMENTS} 张）`" aria-label="添加图片或 PDF" @click="picker?.click()">
+    <div class="composer-card">
+      <div v-if="attachments.length || pdfAttachment" class="attachment-strip">
+        <div v-if="pdfAttachment" class="pdf-attachment">
           <i class="iconfont icon-file" aria-hidden="true"></i>
-        </button>
-        <button type="button" :title="imageMode ? '切换到聊天' : '切换到图片生成'" :aria-label="imageMode ? '切换到聊天' : '切换到图片生成'" :aria-pressed="imageMode" @click="imageMode = !imageMode">
-          <i class="iconfont icon-mofabang" aria-hidden="true"></i>
-        </button>
+          <span :title="pdfAttachment.name">{{ pdfAttachment.name }}</span>
+          <small>{{ pdfAttachment.loading ? '处理中' : pdfAttachment.truncated ? '前 30000 字' : '文字' }}</small>
+          <button type="button" :title="`移除 ${pdfAttachment.name}`" :aria-label="`移除 ${pdfAttachment.name}`" @click="pdfAttachment = null"><i class="iconfont icon-close" aria-hidden="true"></i></button>
+        </div>
+        <div v-for="item in attachments" :key="item.id" class="attachment" :class="{ loading: item.loading }">
+          <span v-if="item.loading" class="attachment-spinner" role="status" aria-label="图片处理中"></span>
+          <button v-else class="attachment-open" type="button" :title="`查看 ${item.name}`" @click="previewImage(item.url)">
+            <img :src="item.url" :alt="item.name">
+          </button>
+          <button class="attachment-remove" type="button" :title="`移除 ${item.name}`" :aria-label="`移除 ${item.name}`" @click="removeImage(item.id)">
+            <i class="iconfont icon-close" aria-hidden="true"></i>
+          </button>
+        </div>
+        <span v-if="attachments.length" class="attachment-hint" :class="{ blocked: noVision }">{{ noVision ? `${store.activeModel.value} 不支持识图` : '图片需所选模型支持识图' }}</span>
       </div>
-      <div class="tool-group tool-group-end">
-        <button type="button" title="API 设置" aria-label="API 设置" :aria-expanded="popup === 'api'" @click="togglePopup('api')"><i class="iconfont icon-key" aria-hidden="true"></i></button>
-        <button type="button" title="模型参数" aria-label="模型参数" :aria-expanded="popup === 'params'" @click="togglePopup('params')"><i class="iconfont icon-params" aria-hidden="true"></i></button>
-        <div class="popup-anchor more-anchor">
-          <button class="more-button" type="button" title="更多设置" aria-label="更多设置" :aria-expanded="popup === 'more'" @click="togglePopup('more')"><span aria-hidden="true"><svg width="18" height="18" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="12" r="3" fill="var(--color-text-3)"></circle><circle cx="24" cy="24" r="3" fill="var(--color-text-3)"></circle><circle cx="24" cy="35" r="3" fill="var(--color-text-3)"></circle></svg></span></button>
-          <div v-if="popup === 'more'" class="composer-menu more-menu" role="menu">
-            <button type="button" role="menuitem" @click="store.state.view = 'help'; popup = ''">帮助中心</button>
-            <button :class="{ active: store.state.settings.sendMode === 'enter' }" type="button" role="menuitemradio" @click="updateSetting('sendMode', 'enter')">Enter发送</button>
-            <button :class="{ active: (store.state.settings.sendMode || 'ctrl-enter') === 'ctrl-enter' }" type="button" role="menuitemradio" @click="updateSetting('sendMode', 'ctrl-enter')">Ctrl+Enter发送</button>
+      <div v-if="imageMode" class="image-model-row">
+        <span>图片模型</span>
+        <input :value="store.state.settings.imageModel || 'gpt-image-1.5'" aria-label="图片模型" placeholder="gpt-image-1.5" @change="updateSetting('imageModel', ($event.target as HTMLInputElement).value.trim() || 'gpt-image-1.5')">
+        <span v-if="store.state.settings.provider === 'utools'">请切换到支持图片生成的 API 线路</span>
+      </div>
+      <div class="textarea-wrap" @click="textarea?.focus()">
+        <textarea ref="textarea" v-model="text" :placeholder="imageMode ? '描述想生成的图片...' : '聊点什么吧...（可粘贴图片或 PDF）'" spellcheck="false" @keydown="keydown" @paste="paste"></textarea>
+      </div>
+      <div class="composer-tools">
+        <div class="tool-group">
+          <button class="attach-button" type="button" :title="`添加图片或 PDF（也可直接粘贴或拖入；图片最多 ${MAX_ATTACHMENTS} 张）`" aria-label="添加图片或 PDF" @click="picker?.click()">
+            <i class="iconfont icon-file" aria-hidden="true"></i>
+          </button>
+          <button type="button" :title="imageMode ? '切换到聊天' : '切换到图片生成'" :aria-label="imageMode ? '切换到聊天' : '切换到图片生成'" :aria-pressed="imageMode" @click="imageMode = !imageMode">
+            <i class="iconfont icon-mofabang" aria-hidden="true"></i>
+          </button>
+          <button type="button" title="API 设置" aria-label="API 设置" :aria-expanded="popup === 'api'" @click="togglePopup('api')"><i class="iconfont icon-key" aria-hidden="true"></i></button>
+          <button type="button" title="模型参数" aria-label="模型参数" :aria-expanded="popup === 'params'" @click="togglePopup('params')"><i class="iconfont icon-params" aria-hidden="true"></i></button>
+          <div class="popup-anchor more-anchor">
+            <button class="more-button" type="button" title="更多设置" aria-label="更多设置" :aria-expanded="popup === 'more'" @click="togglePopup('more')"><span aria-hidden="true"><svg width="16" height="16" viewBox="0 0 48 48" fill="none"><circle cx="24" cy="12" r="3.4" fill="currentColor"></circle><circle cx="24" cy="24" r="3.4" fill="currentColor"></circle><circle cx="24" cy="36" r="3.4" fill="currentColor"></circle></svg></span></button>
+            <div v-if="popup === 'more'" class="composer-menu more-menu" role="menu">
+              <button type="button" role="menuitem" @click="store.state.view = 'help'; popup = ''">帮助中心</button>
+              <button :class="{ active: store.state.settings.sendMode === 'enter' }" type="button" role="menuitemradio" @click="updateSetting('sendMode', 'enter')">Enter发送</button>
+              <button :class="{ active: (store.state.settings.sendMode || 'ctrl-enter') === 'ctrl-enter' }" type="button" role="menuitemradio" @click="updateSetting('sendMode', 'ctrl-enter')">Ctrl+Enter发送</button>
+            </div>
           </div>
         </div>
+        <div class="tool-group-end">
+          <span v-if="notice" class="composer-notice" role="status">{{ notice }}</span>
+          <span class="token-count" :class="{ 'has-token': displayedTokens > 0 }">{{ displayedTokens.toLocaleString() }}</span>
+          <button v-if="store.state.loading" class="send-button is-stop" type="button" title="停止生成" aria-label="停止生成" @click="store.stop">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="2"/></svg>
+          </button>
+          <button v-else class="send-button" type="button" title="发送" aria-label="发送" :disabled="!canSend" @click="submit">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg>
+          </button>
+        </div>
       </div>
-    </div>
-    <div v-if="attachments.length || pdfAttachment" class="attachment-strip">
-      <div v-if="pdfAttachment" class="pdf-attachment">
-        <i class="iconfont icon-file" aria-hidden="true"></i>
-        <span :title="pdfAttachment.name">{{ pdfAttachment.name }}</span>
-        <small>{{ pdfAttachment.loading ? '处理中' : pdfAttachment.truncated ? '前 30000 字' : '文字' }}</small>
-        <button type="button" :title="`移除 ${pdfAttachment.name}`" :aria-label="`移除 ${pdfAttachment.name}`" @click="pdfAttachment = null"><i class="iconfont icon-close" aria-hidden="true"></i></button>
-      </div>
-      <div v-for="item in attachments" :key="item.id" class="attachment" :class="{ loading: item.loading }">
-        <span v-if="item.loading" class="attachment-spinner" role="status" aria-label="图片处理中"></span>
-        <button v-else class="attachment-open" type="button" :title="`查看 ${item.name}`" @click="previewImage(item.url)">
-          <img :src="item.url" :alt="item.name">
-        </button>
-        <button class="attachment-remove" type="button" :title="`移除 ${item.name}`" :aria-label="`移除 ${item.name}`" @click="removeImage(item.id)">
-          <i class="iconfont icon-close" aria-hidden="true"></i>
-        </button>
-      </div>
-      <span v-if="attachments.length" class="attachment-hint" :class="{ blocked: noVision }">{{ noVision ? `${store.activeModel.value} 不支持识图` : '图片需所选模型支持识图' }}</span>
-    </div>
-    <div v-if="imageMode" class="image-model-row">
-      <span>图片模型</span>
-      <input :value="store.state.settings.imageModel || 'gpt-image-1.5'" aria-label="图片模型" placeholder="gpt-image-1.5" @change="updateSetting('imageModel', ($event.target as HTMLInputElement).value.trim() || 'gpt-image-1.5')">
-      <span v-if="store.state.settings.provider === 'utools'">请切换到支持图片生成的 API 线路</span>
-    </div>
-    <div class="textarea-wrap" @click="textarea?.focus()"><textarea ref="textarea" v-model="text" :placeholder="imageMode ? '描述想生成的图片...' : '聊点什么吧...（可粘贴图片或 PDF）'" spellcheck="false" @keydown="keydown" @paste="paste"></textarea></div>
-    <div class="composer-footer">
-      <span v-if="notice" class="composer-notice" role="status">{{ notice }}</span>
-      <span class="token-count" :class="{ 'has-token': displayedTokens > 0 }">{{ displayedTokens.toLocaleString() }}</span>
     </div>
   </footer>
 </template>
 
 <style scoped>
 /* 高度走变量：ChatPopover 的上沿要贴着输入区顶部，带图变高后它得跟着走 */
-.chat-composer { --composer-height: 160px; position: relative; height: var(--composer-height); padding-top: 3px; display: flex; flex: 0 0 var(--composer-height); flex-direction: column; overflow: visible; background: var(--color-bg-2); border-top: 1px solid var(--color-border-2); }
-/* 带图时整条输入区变高，缩略图不挤占本就只有两行的输入框 */
-.chat-composer.has-images { --composer-height: 232px; }
-.chat-composer:has(.image-model-row) { --composer-height: 190px; }
-.chat-composer.has-images:has(.image-model-row) { --composer-height: 262px; }
-.image-model-row { min-height: 30px; padding: 0 16px; display: flex; align-items: center; gap: 8px; color: var(--color-text-3); font-size: 12px; }
-.image-model-row input { width: 135px; height: 24px; padding: 2px 5px; flex: 0 0 135px; border: 1px solid var(--color-border-2); border-radius: 4px; color: var(--color-text-1); background: var(--color-bg-2); }
-.image-model-row span:last-child:not(:first-child) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-composer.dragging { border-top-color: var(--color-primary); box-shadow: inset 0 0 0 1px var(--color-primary); }
+.chat-composer {
+  --composer-height: 138px;
+  position: relative;
+  height: var(--composer-height);
+  padding: 4px 16px 14px;
+  display: flex;
+  flex: 0 0 var(--composer-height);
+  flex-direction: column;
+  overflow: visible;
+  background: transparent;
+}
+/* 带图时整条输入区变高，缩略图不挤占输入框 */
+.chat-composer.has-images { --composer-height: 210px; }
+.chat-composer:has(.image-model-row) { --composer-height: 170px; }
+.chat-composer.has-images:has(.image-model-row) { --composer-height: 242px; }
+.composer-card {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--composer-border);
+  border-radius: 14px;
+  background: var(--composer-bg);
+  box-shadow: var(--composer-shadow);
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.composer-card:focus-within {
+  border-color: rgba(var(--primary-6), .55);
+  box-shadow: 0 0 0 3px rgba(var(--primary-6), .12), var(--composer-shadow);
+}
+.chat-composer.dragging .composer-card {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(var(--primary-6), .18), var(--composer-shadow);
+}
+.image-model-row {
+  min-height: 32px;
+  padding: 6px 14px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-3);
+  font-size: 12px;
+  overflow: hidden;
+}
+.image-model-row > span:first-child { flex: 0 0 auto; white-space: nowrap; }
+.image-model-row input {
+  width: 135px;
+  flex: 0 0 135px;
+  height: 24px;
+  padding: 2px 6px;
+  border: 1px solid var(--color-border-2);
+  border-radius: 6px;
+  color: var(--color-text-1);
+  background: var(--color-fill-1);
+}
+.image-model-row span:last-child:not(:first-child) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .image-picker { display: none; }
-.composer-tools .attach-button { display: grid; place-items: center; }
-.composer-tools .attach-button .icon-file { font-size: 18px; }
-.pdf-mode-dialog { width: min(420px, calc(100vw - 32px)); margin: auto; padding: 20px; border: 0; border-radius: 8px; color: var(--color-text-2); background: var(--color-bg-3); box-shadow: 0 12px 35px #0003; }
+.pdf-mode-dialog { width: min(420px, calc(100vw - 32px)); margin: auto; padding: 20px; border: 0; border-radius: 12px; color: var(--color-text-2); background: var(--color-bg-3); box-shadow: 0 12px 35px #0003; }
 .pdf-mode-dialog::backdrop { background: #1d212980; }
 .pdf-mode-dialog h2 { overflow-wrap: anywhere; color: var(--color-text-1); font-size: 16px; line-height: 1.4; }
 .pdf-mode-actions { display: grid; gap: 8px; margin-top: 18px; }
-.pdf-mode-actions button { min-height: 58px; padding: 10px 12px; border: 1px solid var(--color-border-2); border-radius: 6px; background: var(--color-bg-2); text-align: left; }
+.pdf-mode-actions button { min-height: 58px; padding: 10px 12px; border: 1px solid var(--color-border-2); border-radius: 8px; background: var(--color-bg-2); text-align: left; }
 .pdf-mode-actions button:hover, .pdf-mode-actions button:focus-visible { border-color: var(--color-primary); }
 .pdf-mode-actions b, .pdf-mode-actions span { display: block; line-height: 1.4; }
 .pdf-mode-actions b { color: var(--color-text-1); }
 .pdf-mode-actions span { margin-top: 3px; color: var(--color-text-3); font-size: 12px; }
 .pdf-mode-cancel { display: block; margin: 16px 0 0 auto; color: var(--color-text-3); }
-.attachment-strip { height: 72px; padding: 0 16px; display: flex; flex: 0 0 72px; align-items: center; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+.attachment-strip { height: 70px; padding: 8px 14px 0; display: flex; flex: 0 0 70px; align-items: center; gap: 8px; overflow-x: auto; scrollbar-width: none; }
 .attachment-strip::-webkit-scrollbar { height: 0; }
-.pdf-attachment { min-width: 0; max-width: 220px; height: 56px; padding: 7px 8px; display: grid; grid-template-columns: 18px minmax(0, 1fr) 18px; grid-template-rows: 22px 16px; column-gap: 5px; flex: 0 0 180px; align-items: center; border: 1px solid var(--color-border-2); border-radius: 6px; background: var(--color-fill-1); }
+.pdf-attachment { min-width: 0; max-width: 220px; height: 54px; padding: 7px 8px; display: grid; grid-template-columns: 18px minmax(0, 1fr) 18px; grid-template-rows: 20px 16px; column-gap: 5px; flex: 0 0 180px; align-items: center; border: 1px solid var(--color-border-2); border-radius: 8px; background: var(--color-fill-1); }
 .pdf-attachment > .icon-file { grid-row: 1 / 3; color: var(--color-primary); font-size: 18px; }
 .pdf-attachment > span { overflow: hidden; color: var(--color-text-1); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .pdf-attachment small { grid-column: 2; grid-row: 2; color: var(--color-text-3); font-size: 11px; }
 .pdf-attachment button { grid-column: 3; grid-row: 1; width: 18px; height: 18px; }
-.attachment { position: relative; width: 56px; height: 56px; flex: 0 0 56px; border: 1px solid var(--color-border-2); border-radius: 6px; background: var(--color-fill-1); }
-.attachment-open { width: 100%; height: 100%; display: block; border-radius: 5px; overflow: hidden; cursor: zoom-in; }
+.attachment { position: relative; width: 54px; height: 54px; flex: 0 0 54px; border: 1px solid var(--color-border-2); border-radius: 8px; background: var(--color-fill-1); }
+.attachment-open { width: 100%; height: 100%; display: block; border-radius: 7px; overflow: hidden; cursor: zoom-in; }
 .attachment-open img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .attachment-remove { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: #4e5969; box-shadow: 0 1px 3px #00000033; }
 .attachment-remove:hover { background: #f53f3f; }
@@ -335,31 +396,99 @@ onBeforeUnmount(() => clearTimeout(noticeTimer));
 @media (prefers-reduced-motion: reduce) { .attachment-spinner { animation-duration: 2.4s; } }
 .attachment-hint { color: var(--color-text-3); font-size: 11px; white-space: nowrap; }
 .attachment-hint.blocked { color: #f53f3f; }
-.composer-notice { padding-top: 10px; color: #f53f3f; font-size: 12px; line-height: 1.15; }
-.composer-tools { height: 42px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; }
-.tool-group { display: flex; align-items: center; gap: 25px; }
-.composer-tools button { position: relative; width: 28px; height: 28px; border-radius: 50%; color: var(--color-icon); }
-.tool-group > :not(:last-child) { position: relative; }
-.tool-group > :not(:last-child)::after { content: ""; position: absolute; top: 8px; right: -13px; width: 1px; height: 14px; background: var(--color-fill-2); pointer-events: none; }
-.composer-tools button:hover { color: var(--color-primary); background: var(--color-fill-1); }
-.composer-tools button[aria-pressed="true"] { color: var(--color-primary); background: var(--color-primary-light-1); }
-.composer-tools button:disabled { opacity: 1; color: var(--color-icon); }
-.composer-tools .more-button { width: 18px; height: 18px; border-radius: 0; color: var(--color-text-3); }
-.popup-anchor { position: relative; width: 28px; height: 28px; flex: 0 0 28px; }
-.more-anchor { width: 18px; height: 18px; flex-basis: 18px; }
-.composer-menu { position: absolute; z-index: 90; bottom: 32px; padding: 7px; display: flex; flex-direction: column; border-radius: 4px; color: var(--color-text-2); background: var(--color-bg-2); box-shadow: 0 4px 10px #0000001a; font-size: 14px; font-style: normal; font-weight: 400; line-height: 22px; white-space: nowrap; }
-.composer-tools .composer-menu > button { width: 100%; height: 36px; padding: 0 8px; display: flex; align-items: center; gap: 8px; border-radius: 3px; color: var(--color-text-2); text-align: left; }
-.composer-tools .composer-menu > button:hover, .composer-tools .composer-menu > button.active { color: var(--color-text-2); background: var(--color-primary-light-1); }
-.composer-menu i { width: 16px; font-size: 16px !important; }
-.more-menu { right: -16px; bottom: 22px; width: 140px; }
-.tool-group-end button:nth-child(2) .iconfont { font-size: 18px; line-height: 28px; }
-.composer-tools .iconfont, .composer-tools .icon { display: block; line-height: 1.5715; }
-.tool-group-end { margin-left: auto; }
-.textarea-wrap { height: 64px; flex: 0 0 64px; cursor: text; }
-textarea { width: 100%; height: 50px; padding: 5px 16px 0; overflow-y: auto; border: 0; outline: 0; resize: none; color: var(--color-text-2); background: transparent; font-size: 15px; line-height: 1.5; }
+
+.textarea-wrap { min-height: 0; flex: 1; padding: 10px 14px 2px; cursor: text; display: flex; }
+textarea {
+  width: 100%; height: 100%; padding: 0;
+  overflow-y: auto; border: 0; outline: 0; resize: none;
+  color: var(--color-text-1); background: transparent;
+  font-size: 14.5px; line-height: 1.55;
+}
 textarea:focus, textarea:focus-visible { outline: 0; }
-textarea::placeholder { color: #9ca3af; }
-.composer-footer { height: 50px; padding: 0 16px 0 12px; display: flex; flex: 0 0 50px; align-items: center; overflow: hidden; }
-.token-count { margin-left: auto; padding-top: 10px; color: #c9cdd4; font-size: 11px; font-variant-numeric: tabular-nums; line-height: 1.15; }
-.token-count.has-token { color: var(--color-text-3); font-size: 12px; }
+textarea::placeholder { color: var(--color-text-3); }
+
+.composer-tools {
+  height: 44px; flex: 0 0 44px;
+  padding: 0 10px;
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+}
+.tool-group { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.tool-group-end { min-width: 0; margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.composer-tools .tool-group > button,
+.composer-tools .more-button {
+  position: relative; width: 28px; height: 28px;
+  display: grid; place-items: center;
+  border-radius: 8px; color: var(--color-icon);
+  transition: background .14s ease, color .14s ease;
+}
+.composer-tools .tool-group > button:hover,
+.composer-tools .more-button:hover { color: var(--color-primary); background: var(--color-fill-2); }
+.composer-tools .tool-group > button[aria-pressed="true"] { color: var(--color-primary); background: var(--color-primary-light-1); }
+.composer-tools .attach-button .icon-file { font-size: 17px; }
+.composer-tools .iconfont, .composer-tools .icon { display: block; font-size: 16px; line-height: 1; }
+.popup-anchor { position: relative; width: 28px; height: 28px; flex: 0 0 28px; }
+.composer-menu {
+  position: absolute; z-index: 90; bottom: 34px; left: 0;
+  padding: 6px; display: flex; flex-direction: column;
+  border: 1px solid var(--color-border-2); border-radius: 10px;
+  color: var(--color-text-2); background: var(--color-bg-2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  font-size: 13px; line-height: 20px; white-space: nowrap;
+}
+.composer-tools .composer-menu > button {
+  width: 100%; height: 34px; padding: 0 10px;
+  display: flex; align-items: center; gap: 8px;
+  border-radius: 6px; color: var(--color-text-2); text-align: left;
+}
+.composer-tools .composer-menu > button:hover,
+.composer-tools .composer-menu > button.active { color: var(--color-text-1); background: var(--color-primary-light-1); }
+.more-menu { left: 0; width: 136px; }
+
+.composer-notice {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: #f53f3f; font-size: 11.5px; line-height: 1.2;
+}
+.token-count {
+  flex: 0 0 auto;
+  color: var(--color-text-3); opacity: .65;
+  font-size: 11px; font-variant-numeric: tabular-nums; line-height: 1;
+}
+.token-count.has-token { opacity: 1; font-size: 11.5px; }
+
+.send-button {
+  width: 30px; height: 30px; flex: 0 0 30px;
+  display: grid; place-items: center;
+  border-radius: 9px;
+  color: #fff; background: var(--color-primary);
+  box-shadow: 0 1px 4px rgba(12, 164, 127, 0.30);
+  transition: background .15s ease, transform .1s ease, opacity .15s ease, box-shadow .15s ease;
+}
+.send-button:hover:not(:disabled) {
+  background: #0a9170;
+  box-shadow: 0 2px 8px rgba(12, 164, 127, 0.38);
+}
+.send-button:active:not(:disabled) { transform: scale(0.95); }
+.send-button:disabled {
+  opacity: .38;
+  box-shadow: none;
+  background: var(--color-fill-3);
+  color: var(--color-text-3);
+}
+.send-button.is-stop {
+  background: #d94b40;
+  box-shadow: 0 1px 4px rgba(217, 75, 64, 0.32);
+}
+.send-button.is-stop:hover { background: #c0392b; }
+
+@media (max-width: 600px) {
+  .chat-composer { padding: 4px 8px 10px; }
+  .image-model-row { padding: 6px 10px 0; gap: 6px; }
+  .composer-tools { padding: 0 8px; gap: 4px; }
+  .tool-group { gap: 1px; }
+  .composer-tools .tool-group > button,
+  .composer-tools .more-button,
+  .popup-anchor { width: 26px; height: 26px; flex-basis: 26px; }
+  .tool-group-end { gap: 5px; }
+  .textarea-wrap { padding: 8px 10px 2px; }
+}
 </style>

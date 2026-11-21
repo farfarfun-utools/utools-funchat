@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify';
-import { marked } from 'marked';
+import { marked, type Tokens } from 'marked';
 import { ref } from 'vue';
 import { findBlockStart, findInlineStart, matchBlockMath, matchInlineMath } from './math-delimiters.ts';
 
@@ -172,7 +172,19 @@ const inlineMath = {
   },
 };
 
-marked.use({ extensions: [blockMath, inlineMath] });
+marked.use({
+  extensions: [blockMath, inlineMath],
+  renderer: {
+    code(token: Tokens.Code): string {
+      const rawLang = (token.lang || '').trim().split(/\s+/u)[0] || '';
+      const safeLang = rawLang.replace(/[^a-zA-Z0-9+#._-]/gu, '').slice(0, 24);
+      const displayLang = safeLang || 'code';
+      const codeClass = safeLang ? ` class="language-${escapeHtml(safeLang)}"` : '';
+      const codeHtml = token.escaped ? token.text : escapeHtml(token.text);
+      return `<div class="code-block"><div class="code-header"><span class="code-lang">${escapeHtml(displayLang)}</span><button type="button" class="code-copy" aria-label="复制代码">复制</button></div><pre><code${codeClass}>${codeHtml}</code></pre></div>\n`;
+    },
+  },
+});
 
 /**
  * 将用户输入渲染并净化为可安全插入界面的 HTML。

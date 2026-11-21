@@ -161,28 +161,45 @@ function deleteFromMenu() {
   outline: none; color: var(--color-text-2); background: transparent;
 }
 .search-box input:focus { border-color: rgba(12, 164, 127, .55); background: var(--color-bg-2); }
-.add-button { width: 36px; height: 32px; flex: 0 0 36px; border-radius: 12px; color: #ff7d00; background: #fff7e8; }
-.add-button i { display: block; font-size: 14px; line-height: 1.5715; }
-.add-button:hover { background: #ffefd0; }
-:global(body.dark) .add-button { color: #ff9626; background: rgba(255, 150, 38, .2); }
+.add-button {
+  width: 34px; height: 32px; flex: 0 0 34px;
+  display: grid; place-items: center;
+  border: 1px solid var(--add-btn-border); border-radius: 10px;
+  color: var(--add-btn-color); background: var(--add-btn-bg);
+  transition: background .15s ease, border-color .15s ease, transform .1s ease;
+}
+.add-button i { display: block; font-size: 14px; line-height: 1; }
+.add-button:hover { background: var(--add-btn-hover); }
+.add-button:active { transform: scale(0.96); }
 .collapsed .agent-toolbar { justify-content: center; padding: 12px 14px; }
 .group-tabs { height: 37.84375px; padding: 0 13px; flex: 0 0 37.84375px; border-top: 1px solid var(--color-border-2); border-bottom: 1px solid var(--color-border-2); }
 .group-tabs button { position: relative; height: 36.84375px; padding: 8px 0; display: inline-flex; color: var(--color-primary); font-size: 12px; font-weight: 500; line-height: 1.5715; }
 .group-tabs button::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; height: 2px; background: var(--color-primary); }
 .group-tabs button span { display: block; padding: 1px 0; line-height: 1.5715; will-change: transform; }
-.agents-scroll { flex: 1; margin-bottom: 3px; overflow-y: auto; }
-.agents-scroll { scrollbar-width: none; }
+.agents-scroll { flex: 1; padding: 6px 8px 8px; overflow-y: auto; scrollbar-width: none; }
 .agents-scroll::-webkit-scrollbar { width: 0; height: 0; }
-.agent-item { position: relative; height: 60px; padding: 0 16px; display: flex; align-items: center; cursor: pointer; transition: background .15s ease; }
-.agent-item:hover, .agent-item.active { background: var(--color-fill-2); }
+.collapsed .agents-scroll { padding: 6px 6px 8px; }
+.agent-item {
+  position: relative; height: 56px; padding: 0 10px; margin-bottom: 2px;
+  display: flex; align-items: center;
+  border: 1px solid transparent; border-radius: 10px;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.agent-item:hover:not(.active) { background: var(--color-fill-2); }
+.agent-item.active {
+  background: var(--agent-active-bg);
+  border-color: var(--agent-active-border);
+}
 /* 行是 article 不是 button，全局那条 focus-visible 规则管不到它；
    这列贴着窗口左边，描边往外画会被裁掉半条，所以收到里面来 */
 .agent-item:focus-visible { outline: 2px solid rgba(var(--primary-6), .5); outline-offset: -2px; }
-.agent-copy { min-width: 0; margin-left: 12px; display: flex; flex: 1; flex-direction: column; }
-.agent-copy b { overflow: hidden; font-size: 13px; font-weight: 500; line-height: 1.5715; color: var(--color-text-2); text-overflow: ellipsis; white-space: nowrap; }
-.agent-copy small { overflow: hidden; display: flex; align-items: center; color: var(--color-text-3); font-size: 12px; line-height: 1.5715; text-overflow: ellipsis; white-space: nowrap; }
+.agent-copy { min-width: 0; margin-left: 11px; display: flex; flex: 1; flex-direction: column; }
+.agent-copy b { overflow: hidden; font-size: 13px; font-weight: 500; line-height: 1.5; color: var(--color-text-2); text-overflow: ellipsis; white-space: nowrap; }
+.agent-item.active .agent-copy b { color: var(--color-text-1); font-weight: 600; }
+.agent-copy small { overflow: hidden; display: flex; align-items: center; color: var(--color-text-3); font-size: 12px; line-height: 1.45; text-overflow: ellipsis; white-space: nowrap; }
 .pin-marker { width: 14px; height: 14px; margin-right: 1px; flex: 0 0 14px; }
-.collapsed .agent-item { justify-content: center; padding: 0; }
+.collapsed .agent-item { justify-content: center; padding: 0; width: 48px; margin: 0 auto 2px; }
 .empty { padding: 30px 10px; text-align: center; color: var(--color-text-3); }
 .collapse-button { width: calc(100% + 1px); height: 48px; display: flex; flex: 0 0 48px; align-items: center; justify-content: center; color: var(--color-text-1); background: var(--color-bg-3); border-right: 1px solid var(--color-border-2); }
 .collapse-button span { width: 14px; height: 16.09375px; }

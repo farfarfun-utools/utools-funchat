@@ -63,8 +63,23 @@ const dropped = computed(() => droppedImageCount(props.message));
 
 watch(long, (value) => { if (value) collapsed.value = true; });
 
-function openLink(event: MouseEvent) {
-  const anchor = (event.target as Element).closest?.('a[href]');
+async function handleProseClick(event: MouseEvent) {
+  const target = event.target as Element;
+  const copyButton = target.closest?.('button.code-copy') as HTMLButtonElement | null;
+  if (copyButton) {
+    event.preventDefault();
+    const code = copyButton.closest('.code-block')?.querySelector('pre code')?.textContent ?? '';
+    await host.copyText(code);
+    copyButton.classList.add('is-copied');
+    copyButton.textContent = '已复制';
+    setTimeout(() => {
+      if (!copyButton.isConnected) return;
+      copyButton.classList.remove('is-copied');
+      copyButton.textContent = '复制';
+    }, 1500);
+    return;
+  }
+  const anchor = target.closest?.('a[href]');
   if (!anchor) return;
   event.preventDefault();
   const href = anchor.getAttribute('href') || '';
@@ -119,7 +134,7 @@ async function copyImage() {
           </button>
           <span v-if="dropped" class="message-image-dropped">{{ dropped }} 张图片因体积超限未保存</span>
         </div>
-        <div class="prose-chat" :class="{ collapsed: collapsed && !expandAllForExport }" v-html="html" @click="openLink"></div>
+        <div class="prose-chat" :class="{ collapsed: collapsed && !expandAllForExport }" v-html="html" @click="handleProseClick"></div>
       </div>
       <div v-if="index >= 0" class="message-actions">
         <button type="button" :title="copied ? '已复制' : '复制'" :aria-label="copied ? '已复制' : '复制'" @click="copy">
@@ -154,24 +169,48 @@ async function copyImage() {
 
 <style scoped>
 .chat-box-item { position: relative; display: flex; margin: 0 20px; padding: 0 0 30px; }
-.chat-content { position: relative; min-width: 0; max-width: min(840px, calc(100% - 54px)); margin: 3px 12px 0; }
-.nickname { display: block; margin-bottom: 6px; color: var(--color-text-3); font-size: 12px; line-height: 1.15; }
-.prose-chat { margin-right: 28px; padding: 10px 16px; overflow: hidden; border-radius: 3px 16px 16px; color: var(--color-text-2); background: var(--color-bg-3); line-height: 1.8; overflow-wrap: anywhere; }
+.chat-content { position: relative; min-width: 0; max-width: min(840px, calc(100% - 54px)); margin: 2px 12px 0; }
+.nickname { display: block; margin-bottom: 6px; color: var(--color-text-3); font-size: 12px; font-weight: 500; line-height: 1.25; }
+.prose-chat {
+  min-width: 0;
+  margin-right: 28px;
+  padding: 12px 16px;
+  overflow: hidden;
+  border: 1px solid var(--bubble-border);
+  border-radius: 4px 16px 16px 16px;
+  color: var(--color-text-1);
+  background: var(--color-bg-3);
+  box-shadow: var(--bubble-shadow);
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
 .prose-chat.collapsed { position: relative; max-height: 280px; }
 .prose-chat.collapsed::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; height: 70px; background: linear-gradient(transparent, var(--color-bg-3)); pointer-events: none; }
 .chat-user { justify-content: flex-end; }
 .chat-user .chat-content { order: 1; }
 .chat-user .user-avatar { order: 2; }
 .chat-user .nickname { text-align: right; }
-.chat-user .prose-chat { margin-right: 0; margin-left: 28px; border-radius: 16px 3px 16px 16px; background: var(--user-bubble); }
+.chat-user .prose-chat {
+  margin-right: 0;
+  margin-left: 28px;
+  border-color: var(--user-bubble-border);
+  border-radius: 16px 4px 16px 16px;
+  background: var(--user-bubble);
+}
 .chat-user .prose-chat.collapsed::after { background: linear-gradient(transparent, var(--user-bubble)); }
-.user-avatar { width: 26px; height: 26px; display: grid; flex: 0 0 26px; place-items: center; border-radius: 50%; color: #fff; background: #0ca47f; }
+.user-avatar {
+  width: 26px; height: 26px;
+  display: grid; flex: 0 0 26px; place-items: center;
+  border-radius: 50%;
+  color: #fff; background: #0ca47f;
+  box-shadow: var(--avatar-ring);
+}
 /* 这 28px 是给对侧留的呼吸位，但出图时它就是一条纯空白，所以导出期间去掉 */
 .message-body.exporting .prose-chat { margin-right: 0; margin-left: 0; }
-.message-actions { position: absolute; bottom: -29px; left: 12px; display: flex; opacity: 0; transition: opacity .2s ease; }
+.message-actions { position: absolute; bottom: -29px; left: 12px; display: flex; gap: 2px; opacity: 0; transition: opacity .2s ease; }
 .chat-user .message-actions { right: 12px; left: auto; }
 .chat-box-item:hover .message-actions, .chat-box-item:focus-within .message-actions { opacity: 1; }
-.message-actions button { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: var(--color-icon); }
+.message-actions button { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: var(--color-icon); transition: background .14s ease, color .14s ease; }
 .message-actions button:hover { color: var(--color-primary); background: var(--color-bg-2); }
 .message-actions button:disabled { opacity: .45; }
 /* 与相邻 iconfont 图标视觉等重 */
@@ -179,20 +218,114 @@ async function copyImage() {
 .rotated { transform: rotate(180deg); }
 .has-error .prose-chat { border: 1px solid rgba(243, 94, 81, .35); color: #d94b40; }
 .message-images { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; margin-bottom: 8px; }
-.message-image { display: block; border-radius: 6px; overflow: hidden; cursor: zoom-in; }
-.message-images img { max-width: 260px; max-height: 260px; display: block; border-radius: 6px; object-fit: contain; }
+.message-image { display: block; border-radius: 8px; overflow: hidden; cursor: zoom-in; border: 1px solid var(--bubble-border); }
+.message-images img { max-width: 260px; max-height: 260px; display: block; border-radius: 8px; object-fit: contain; }
 .message-image-dropped { padding: 4px 8px; border: 1px dashed var(--color-border-2); border-radius: 6px; color: var(--color-text-3); font-size: 12px; }
-:deep(.prose-chat p + p), :deep(.prose-chat ul), :deep(.prose-chat ol), :deep(.prose-chat pre), :deep(.prose-chat blockquote) { margin-top: .8em; }
-:deep(.prose-chat ul), :deep(.prose-chat ol) { padding-left: 1.4em; }
+:deep(.prose-chat p + p),
+:deep(.prose-chat ul),
+:deep(.prose-chat ol),
+:deep(.prose-chat pre),
+:deep(.prose-chat .code-block),
+:deep(.prose-chat blockquote),
+:deep(.prose-chat h1),
+:deep(.prose-chat h2),
+:deep(.prose-chat h3) { margin-top: .85em; }
+:deep(.prose-chat > :first-child) { margin-top: 0; }
+:deep(.prose-chat ul), :deep(.prose-chat ol) { padding-left: 1.45em; }
 :deep(.prose-chat ul) { list-style: disc; }
 :deep(.prose-chat ol) { list-style: decimal; }
-:deep(.prose-chat a) { color: var(--color-primary); text-decoration: underline; }
-:deep(.prose-chat pre) { padding: 12px 14px; overflow-x: auto; border-radius: 5px; color: #e8eaed; background: #282c34; line-height: 1.55; }
-:deep(.prose-chat code:not(pre code)) { padding: 2px 5px; border-radius: 3px; color: #d84d73; background: var(--color-fill-2); }
+:deep(.prose-chat li + li) { margin-top: .28em; }
+:deep(.prose-chat a) { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
+:deep(.prose-chat .code-block) {
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--code-border);
+  border-radius: 10px;
+  background: var(--code-bg);
+}
+:deep(.prose-chat .code-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px 6px 13px;
+  background: var(--code-header-bg);
+  border-bottom: 1px solid var(--code-border);
+  color: var(--code-muted);
+  font-size: 11.5px;
+  line-height: 1.2;
+  user-select: none;
+}
+:deep(.prose-chat .code-lang) {
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-transform: lowercase;
+}
+:deep(.prose-chat .code-copy) {
+  padding: 3px 8px;
+  border-radius: 5px;
+  color: var(--code-muted);
+  background: transparent;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  transition: background .14s ease, color .14s ease;
+}
+:deep(.prose-chat .code-copy:hover) {
+  color: var(--color-text-1);
+  background: var(--code-copy-hover);
+}
+:deep(.prose-chat .code-copy.is-copied) {
+  color: var(--color-primary);
+}
+:deep(.prose-chat .code-block pre) {
+  margin: 0;
+  padding: 12px 14px;
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 0;
+  color: var(--code-text);
+  background: transparent;
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12.8px;
+  line-height: 1.65;
+  tab-size: 2;
+  scrollbar-width: thin;
+}
+:deep(.prose-chat .code-block pre code) {
+  display: block;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  font-family: inherit;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+:deep(.prose-chat > pre) {
+  padding: 12px 14px;
+  overflow-x: auto;
+  border: 1px solid var(--code-border);
+  border-radius: 10px;
+  color: var(--code-text);
+  background: var(--code-bg);
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12.8px;
+  line-height: 1.65;
+}
+:deep(.prose-chat code:not(pre code)) {
+  padding: 1.5px 5px;
+  border-radius: 4px;
+  color: #c83e66;
+  background: var(--color-fill-2);
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: .9em;
+}
 /* KaTeX 还在下载时公式先以原文占位，别让它闪成行内代码那种高亮粉 */
-:deep(.prose-chat code.math-pending) { padding: 0; color: inherit; background: transparent; opacity: .7; }
-:deep(.prose-chat blockquote) { padding-left: 12px; border-left: 3px solid var(--color-primary); color: var(--color-text-3); }
-:deep(.prose-chat table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+:deep(.prose-chat code.math-pending) { padding: 0; color: inherit; background: transparent; opacity: .7; font-family: inherit; }
+:deep(.prose-chat blockquote) { padding: 2px 0 2px 12px; border-left: 3px solid var(--color-primary); color: var(--color-text-3); }
+:deep(.prose-chat table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin-top: .85em; }
 :deep(.prose-chat th), :deep(.prose-chat td) { padding: 6px 10px; border: 1px solid var(--color-border-2); }
 @media (max-width: 600px) {
   .chat-box-item { margin-right: 12px; margin-left: 12px; }

@@ -166,7 +166,15 @@ watch(() => [store.state.currentAgent?._id, store.state.currentAgent?.chatId], a
 <style scoped>
 .chat-view { position: relative; min-width: 0; height: 100vh; display: flex; flex: 1; flex-direction: column; background: var(--chat-bg); }
 .save-error { padding: 7px 16px; color: #b42318; background: #fff1ef; font-size: 12px; }
-.chat-header { height: 56px; padding: 0 12px 0 16px; display: flex; flex: 0 0 56px; align-items: center; gap: 10px; border-bottom: 1px solid var(--color-border-2); background: var(--color-bg-2); }
+.chat-header {
+  position: relative; z-index: 10;
+  height: 56px; padding: 0 12px 0 16px;
+  display: flex; flex: 0 0 56px; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--color-border-2);
+  background: var(--header-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
 .header-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .header-text b { overflow: hidden; color: var(--color-text-1); font-size: 14px; font-weight: 600; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 .header-text small { display: flex; align-items: center; gap: 6px; overflow: hidden; color: var(--color-text-3); font-size: 12px; line-height: 1.2; white-space: nowrap; }
@@ -186,7 +194,7 @@ watch(() => [store.state.currentAgent?._id, store.state.currentAgent?.chatId], a
 .messages::-webkit-scrollbar { width: 0; }
 /* 不要给会话列加宽度上限：这是双边气泡布局，头像就该贴着窗口两侧，
    居中限宽会在左右各留出一大片空白 */
-.messages-content { min-height: 100%; padding-top: 20px; }
+.messages-content { min-height: 100%; padding: 26px 0 14px; }
 /* 几百条消息的会话里，每次滚动浏览器都要把全部气泡重新布局、重新绘制一遍——而屏幕上
    同时也就放得下三四条。content-visibility 让视口外的气泡跳过布局和绘制，DOM 还在，
    所以导出、查找、滚动位置都不受影响；contain-intrinsic-size 的 auto 会记住它上次的真实

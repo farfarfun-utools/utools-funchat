@@ -65,6 +65,7 @@ const failed = ref(false);
   overflow: hidden;
   border-radius: 50%;
   color: #fff;
+  box-shadow: var(--avatar-ring);
 }
 .agent-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .agent-avatar .icon { font-size: var(--avatar-icon-size); font-weight: 500; line-height: 1; }
