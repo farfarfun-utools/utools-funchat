@@ -126,7 +126,10 @@ watch(() => [store.state.currentAgent?._id, store.state.currentAgent?.chatId], a
         <ChatExportMenu />
       </div>
     </header>
-    <div v-if="store.state.saveError" class="save-error" role="alert">会话未保存：{{ store.state.saveError }}</div>
+    <div v-if="store.state.saveError" class="save-error" role="alert">
+      <span>会话未保存：{{ store.state.saveError }}</span>
+      <button type="button" class="save-error-close" aria-label="关闭提示" @click="store.state.saveError = ''">×</button>
+    </div>
     <!-- 包一层定位容器：输入区带图时会变高，按钮按「消息区底部」定位才不会被压住 -->
     <div class="messages-area">
       <button v-if="!stick" class="back-to-bottom" type="button" title="回到底部" @click="scrollToBottom">
@@ -165,7 +168,10 @@ watch(() => [store.state.currentAgent?._id, store.state.currentAgent?.chatId], a
 
 <style scoped>
 .chat-view { position: relative; min-width: 0; height: 100vh; display: flex; flex: 1; flex-direction: column; background: var(--chat-bg); }
-.save-error { padding: 7px 16px; color: #b42318; background: #fff1ef; font-size: 12px; }
+.save-error { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 14px 7px 16px; color: #b42318; background: #fff1ef; border-bottom: 1px solid rgba(180, 35, 24, 0.14); font-size: 12px; }
+:global(body.dark) .save-error { color: #ff9c92; background: rgba(217, 75, 64, 0.16); border-bottom-color: rgba(255, 156, 146, 0.22); }
+.save-error-close { width: 20px; height: 20px; flex: 0 0 20px; display: grid; place-items: center; border-radius: 4px; color: inherit; font-size: 15px; opacity: .75; }
+.save-error-close:hover { opacity: 1; background: rgba(180, 35, 24, 0.12); }
 .chat-header {
   position: relative; z-index: 10;
   height: 56px; padding: 0 12px 0 16px;

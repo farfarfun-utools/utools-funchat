@@ -564,3 +564,37 @@ test('换话题、换好友、打开历史都让临时调参失效', async () =>
     assert.deepEqual({ ...store.paramOverrides }, {}, '弹窗标题承诺的是「发起新话题后失效」');
   }
 });
+
+test('openHistory 忽略等待读库期间被新会话或新历史顶掉的过期结果', async () => {
+  await setup({ agents: 1 });
+  host.ai = replyWith('回复1');
+  await store.send('话题1');
+  const first = store.state.histories[0];
+  store.newConversation();
+  host.ai = replyWith('回复2');
+  await store.send('话题2');
+  const second = store.state.histories.find((item) => item._id !== first._id)!;
+
+  let releaseFirst: ((doc: unknown) => void) | null = null;
+  const originalGet = host.db.promises.get;
+  host.db.promises.get = (id: string) => {
+    if (id.includes(first._id)) {
+      return new Promise((resolve) => { releaseFirst = resolve; });
+    }
+    return originalGet(id);
+  };
+  try {
+    const openingFirst = store.openHistory(first);
+    const openingSecond = store.openHistory(second);
+    await openingSecond;
+    assert.equal(store.state.currentAgent?.chatId, second._id);
+    assert.equal(store.state.messages[0]?.content, '话题2');
+
+    releaseFirst?.(host.db.get(`chatbody@${first._id.slice(5)}`));
+    await openingFirst;
+    assert.equal(store.state.currentAgent?.chatId, second._id, '先发起但后返回的旧话题不得覆盖当前话题');
+    assert.equal(store.state.messages[0]?.content, '话题2');
+  } finally {
+    host.db.promises.get = originalGet;
+  }
+});

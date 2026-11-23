@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import { useChatStore } from '../../stores/chat.js';
 import ConfirmDialog from '../../components/ConfirmDialog.vue';
 import AgentAvatar from '../agents/AgentAvatar.vue';
@@ -8,8 +8,13 @@ import type { History } from '../../types.ts';
 
 const store = useChatStore();
 const confirmDialog = ref();
+const searchInput = ref<HTMLInputElement>();
 const query = ref('');
 const tab = ref('history');
+
+onMounted(() => {
+  void nextTick(() => searchInput.value?.focus());
+});
 
 function formatTokens(count: number): string {
   if (count >= 10000) return `${(count / 1000).toFixed(0)}k`;
@@ -63,7 +68,7 @@ async function clearHistories() {
         </div>
         <label class="history-search">
           <i class="iconfont icon-search" aria-hidden="true"></i>
-          <input v-model="query" type="search" placeholder="搜索历史话题" aria-label="搜索历史话题">
+          <input ref="searchInput" v-model="query" type="search" placeholder="搜索历史话题" aria-label="搜索历史话题">
         </label>
       </header>
 
@@ -78,10 +83,10 @@ async function clearHistories() {
             <i class="iconfont icon-chat history-chat" aria-hidden="true"></i>
             <b>{{ history.title || '无标题' }}</b>
             <div class="history-actions">
-              <button type="button" :title="history.isFavorite ? '取消收藏' : '收藏'" @click.stop="store.toggleFavorite(history)">
+              <button type="button" :title="history.isFavorite ? '取消收藏' : '收藏'" :aria-label="history.isFavorite ? '取消收藏' : '收藏'" @click.stop="store.toggleFavorite(history)">
                 <i class="iconfont" :class="history.isFavorite ? 'icon-stars-fill' : 'icon-stars'" aria-hidden="true"></i>
               </button>
-              <button type="button" title="删除话题" @click.stop="deleteSelectedHistory(history)">
+              <button type="button" title="删除话题" aria-label="删除话题" @click.stop="deleteSelectedHistory(history)">
                 <i class="iconfont icon-delete" aria-hidden="true"></i>
               </button>
             </div>

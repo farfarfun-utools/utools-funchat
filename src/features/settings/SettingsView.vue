@@ -11,6 +11,10 @@ const store = useChatStore();
 const preferences = reactive({
   windowHeight: Number(store.state.settings.windowHeight) || 660,
 });
+const heightPercent = computed(() => {
+  const clamped = Math.min(1000, Math.max(450, Number(preferences.windowHeight) || 660));
+  return Math.round(((clamped - 450) / (1000 - 450)) * 100);
+});
 const selectedAgents = ref<string[]>([]);
 const modelFilter = ref('');
 const targetModel = ref('');
@@ -32,6 +36,7 @@ async function chooseTargetModel() {
 }
 
 function savePreferences() {
+  preferences.windowHeight = Math.min(1000, Math.max(450, Math.round(Number(preferences.windowHeight) || 660)));
   store.updateSettings({ ...preferences });
 }
 
@@ -39,7 +44,8 @@ const modelStatus = ref('');
 
 function replaceModels() {
   const model = targetModel.value.trim();
-  if (!model || !selectedAgents.value.length) return;
+  const count = targetAgents.value.length;
+  if (!model || !count) return;
   modelStatus.value = '';
   try {
     for (const agent of targetAgents.value) {
@@ -48,6 +54,7 @@ function replaceModels() {
     }
     selectedAgents.value = [];
     targetModel.value = '';
+    modelStatus.value = `已为 ${count} 位好友替换为 ${model}`;
   } catch (error) {
     modelStatus.value = error instanceof Error ? error.message : '批量替换模型失败';
   }
@@ -164,8 +171,8 @@ async function restoreBackup(content: string) {
         <div class="reference-label">插件高度</div>
         <div class="reference-body">
           <div class="height-control">
-            <input v-model.number="preferences.windowHeight" type="range" min="450" max="1000" @change="savePreferences">
-            <input v-model.number="preferences.windowHeight" class="height-number" type="number" min="450" max="1000" @change="savePreferences">
+            <input v-model.number="preferences.windowHeight" type="range" min="450" max="1000" :style="{ '--pct': `${heightPercent}%` }" aria-label="插件高度滑块" @change="savePreferences">
+            <input v-model.number="preferences.windowHeight" class="height-number" type="number" min="450" max="1000" aria-label="插件高度数值" @change="savePreferences">
           </div>
           <small>仅在“插件未分离”和“自动分离后宽度最小”的时候生效（为了兼容分离插件后拖动窗口的记忆功能）</small>
         </div>
@@ -195,8 +202,8 @@ async function restoreBackup(content: string) {
             </div>
           </div>
         </div>
-        <button class="replace-button" type="button" @click="replaceModels"><i class="iconfont icon-refresh" aria-hidden="true"></i>一键批量替换模型</button>
-        <p v-if="modelStatus" class="backup-status">{{ modelStatus }}</p>
+        <button class="replace-button" type="button" :disabled="!targetModel.trim() || !selectedAgents.length" @click="replaceModels"><i class="iconfont icon-refresh" aria-hidden="true"></i>一键批量替换模型</button>
+        <p v-if="modelStatus" class="model-status" role="status">{{ modelStatus }}</p>
         <div class="instructions"><p>使用说明：</p><p>1、在左侧点击需要替换的好友到右侧。</p><p>2、在右侧选择目标模型。</p><p>3、点击“一键替换”按钮进行批量替换模型。</p></div>
       </div>
     </section>
@@ -239,7 +246,7 @@ async function restoreBackup(content: string) {
 .height-row { margin-bottom: 12px; }
 .height-control { height: 32px; display: flex; align-items: center; gap: 20px; }
 .height-control input[type="range"] { height: 18px; min-width: 0; flex: 1; appearance: none; background: transparent; }
-.height-control input[type="range"]::-webkit-slider-runnable-track { height: 2px; border-radius: 1px; background: linear-gradient(to right, var(--color-primary) 0 38%, var(--color-border-2) 38% 100%); }
+.height-control input[type="range"]::-webkit-slider-runnable-track { height: 2px; border-radius: 1px; background: linear-gradient(to right, var(--color-primary) 0 var(--pct, 38%), var(--color-border-2) var(--pct, 38%) 100%); }
 .height-control input[type="range"]::-webkit-slider-thumb { width: 12px; height: 12px; margin-top: -5px; appearance: none; border: 2px solid var(--color-primary); border-radius: 50%; background: var(--color-bg-2); }
 .height-number { width: 80px; height: 32px; padding: 0 12px; border: 0; border-radius: 3px; outline: 0; color: var(--color-text-2); background: var(--color-fill-2); font-weight: 400; text-align: center; }
 .height-number::-webkit-inner-spin-button, .height-number::-webkit-outer-spin-button { appearance: none; margin: 0; }
@@ -270,13 +277,17 @@ async function restoreBackup(content: string) {
 .transfer-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--color-text-3); }
 .transfer-empty svg { width: 48px; height: 48px; color: #a9aeb8; }
 .transfer-empty span { margin-top: 4px; }
-.replace-button { width: 100%; min-height: 32px; margin-top: 12px; border-radius: 12px; color: #fff; background: var(--color-primary); }
+.replace-button { width: 100%; min-height: 32px; margin-top: 12px; border-radius: 12px; color: #fff; background: var(--color-primary); transition: filter .14s ease, opacity .14s ease; }
+.replace-button:hover:not(:disabled) { filter: brightness(1.06); }
+.replace-button:disabled { opacity: .45; cursor: not-allowed; }
 .replace-button i { margin-right: 8px; color: #fff; }
+.model-status { margin-top: 8px; color: var(--color-primary); font-size: 12px; }
 .reference-settings .instructions { margin-top: 12px; color: var(--color-text-3); overflow-wrap: anywhere; }
 .reference-settings .instructions p { margin: 0; }
 .backup-card { flex-direction: row; }
 .backup-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-.backup-actions button { height: 32px; padding: 0 15px; border-radius: 12px; color: #fff; background: var(--color-primary); }
+.backup-actions button { height: 32px; padding: 0 15px; border-radius: 12px; color: #fff; background: var(--color-primary); transition: filter .14s ease, opacity .14s ease; }
+.backup-actions button:hover:not(:disabled) { filter: brightness(1.06); }
 .backup-actions button:disabled { opacity: .6; }
 .backup-actions button i { margin-right: 8px; color: #fff; }
 .backup-status { color: var(--color-text-3); font-size: 12px; }

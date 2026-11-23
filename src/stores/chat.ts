@@ -72,7 +72,14 @@ const state = reactive<AppState>({
 
 let abortController: AbortController | null = null;
 let activeStream = 0;
+let conversationEpoch = 0;
+let lastChatTimestamp = 0;
 let presetHidden = false;
+
+function nextChatId(agentId: string): string {
+  lastChatTimestamp = Math.max(Date.now(), lastChatTimestamp + 1);
+  return `chat@${agentId}#${lastChatTimestamp}`;
+}
 const systemTheme: MediaQueryList | undefined = globalThis.matchMedia?.('(prefers-color-scheme: dark)');
 
 // 历史文档里存着 presetPrefix 写进去的那条 system 指令，回填到界面时要去掉：
@@ -327,6 +334,7 @@ async function init(): Promise<void> {
  * 先 stop()：恢复的瞬间可能正有一条流式回复在写，它写完会往已经不存在的话题里落盘。
  */
 async function reload(): Promise<void> {
+  conversationEpoch += 1;
   stop(false);
   clearParamOverrides();
   state.settings = loadSettings();
@@ -345,6 +353,7 @@ async function reload(): Promise<void> {
 
 function selectAgent(agent: Agent | null | undefined): boolean {
   if (!agent || !stop()) return false;
+  conversationEpoch += 1;
   clearParamOverrides();
   delete agent.chatId;
   state.currentAgent = agent;
@@ -469,6 +478,7 @@ function deleteAgent(agent: Agent): void {
     return;
   }
   state.currentAgent = null;
+  conversationEpoch += 1;
   adoptStoredMessages([]);
   presetHidden = false;
   state.error = '';
@@ -482,10 +492,11 @@ function togglePin(agent: Agent): void {
 
 function newConversation(): void {
   if (!stop()) return;
+  conversationEpoch += 1;
   clearParamOverrides();
   adoptStoredMessages([]);
   presetHidden = Boolean(state.currentAgent);
-  if (state.currentAgent) state.currentAgent.chatId = `chat@${state.currentAgent._id}#${Date.now()}`;
+  if (state.currentAgent) state.currentAgent.chatId = nextChatId(state.currentAgent._id);
 }
 
 /**
@@ -584,7 +595,7 @@ function stop(persist = true): boolean {
 function persistCurrentConversation(): boolean {
   if (!unsavedMessages) return true;
   if (!state.currentAgent || !state.messages.some((message) => message.role === 'user')) return true;
-  const id = state.currentAgent.chatId || `chat@${state.currentAgent._id}#${Date.now()}`;
+  const id = state.currentAgent.chatId || nextChatId(state.currentAgent._id);
   state.currentAgent.chatId = id;
   const firstUser = state.messages.find((message) => message.role === 'user');
   const existing = state.histories.find((history) => history._id === id);
@@ -610,8 +621,11 @@ async function openHistory(history: History): Promise<void> {
   const agent = state.agents.find((item) => item._id === history.agentId);
   if (!agent) return;
   if (!stop()) return;
+  const epoch = ++conversationEpoch;
   // 正文先读出来再换屏：中途换好友、留着上一条话题的消息在那儿晾着，看着就像点错了
   const messages = await historyMessages(history._id);
+  // 等待读库期间用户若又切了别的话题/好友，丢弃这次过期的回填
+  if (epoch !== conversationEpoch) return;
   clearParamOverrides();
   state.currentAgent = agent;
   agent.chatId = history._id;

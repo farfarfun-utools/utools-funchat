@@ -185,6 +185,7 @@ async function submit() {
 }
 
 function keydown(event: KeyboardEvent) {
+  if (event.isComposing) return;
   const ctrlMode = (store.state.settings.sendMode || 'ctrl-enter') === 'ctrl-enter';
   if (event.key === 'Enter' && !event.shiftKey && (ctrlMode ? event.ctrlKey || event.metaKey : !event.ctrlKey && !event.metaKey)) {
     event.preventDefault();

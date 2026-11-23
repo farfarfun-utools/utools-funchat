@@ -13,6 +13,7 @@ const dialog = ref();
 const editing = ref<Agent | null>(null);
 const tab = ref('basic');
 const question = ref('');
+const formError = ref('');
 // 先用「新建」的那套默认值把字段铺满：open() 里的 Object.assign 只覆盖不删除，
 // 空对象起步的话模板在第一次 open 之前读到的全是 undefined。
 const form = reactive<AgentFormValues>(agentFormValues(null));
@@ -37,17 +38,24 @@ function open(agent: Agent | null = null) {
   editing.value = agent;
   Object.assign(form, agentFormValues(agent));
   question.value = '';
+  formError.value = '';
   tab.value = 'basic';
   dialog.value.showModal();
   dialog.value.focus();
 }
 
 function submit() {
-  if (!form.nickname.trim()) return;
+  formError.value = '';
+  if (!form.nickname.trim()) {
+    formError.value = '请填写好友昵称';
+    tab.value = 'basic';
+    return;
+  }
   let paramsFunctions;
   try {
     paramsFunctions = form.type === 'function' && form.functions.trim() ? JSON.parse(form.functions) : undefined;
   } catch {
+    formError.value = '函数对象不是有效的 JSON，请检查格式后再保存';
     tab.value = 'basic';
     return;
   }
@@ -67,6 +75,12 @@ function addQuestion() {
   if (!value) return;
   form.quick_questions.push(value);
   question.value = '';
+}
+
+function onQuestionEnter(event: KeyboardEvent) {
+  if (event.isComposing) return;
+  event.preventDefault();
+  addQuestion();
 }
 
 defineExpose({ open });
@@ -105,7 +119,7 @@ defineExpose({ open });
           <label class="form-row prefix-row"><span>提问前缀</span><span class="control"><input v-model="form.autoPrefix" placeholder="副指令，如：请翻译：xxx"><small>当指令无法满足需求时,可通过提问前缀(副指令)强制Ai执行。</small></span></label>
         </template>
         <template v-else>
-          <label class="form-row function-row"><span>函数对象</span><span class="control"><textarea v-model="form.functions" rows="2" placeholder="传入函数Json对象。留空将跳过函数调用，直接将输入当作参数。"></textarea></span></label>
+          <label class="form-row function-row"><span>函数对象</span><span class="control"><textarea v-model="form.functions" rows="2" placeholder="传入函数Json对象。留空将跳过函数调用，直接将输入当作参数。" @input="formError = ''"></textarea></span></label>
         </template>
       </section>
 
@@ -118,10 +132,11 @@ defineExpose({ open });
 
       <section v-else class="dialog-pane advanced-pane">
         <label class="form-row"><span>超级面板</span><span class="advanced-control"><span class="panel-toggle"><span class="switch"><input v-model="form.superPanel" type="checkbox" role="switch" aria-label="显示在超级面板"><i></i></span><span>显示在超级面板</span></span><small>选中文字后点击此角色，将开启新话题并自动发送给当前配置的 AI 服务。</small></span></label>
-        <label class="form-row question-row"><span>提问示例</span><span class="control tag-input"><span v-for="(item, index) in form.quick_questions" :key="`${item}-${index}`" class="question-tag">{{ item }}<button type="button" aria-label="删除提问示例" @click="form.quick_questions.splice(index, 1)">×</button></span><input v-model="question" placeholder="请输入问题示例，按回车添加" @keydown.enter.prevent="addQuestion"></span></label>
+        <label class="form-row question-row"><span>提问示例</span><span class="control tag-input"><span v-for="(item, index) in form.quick_questions" :key="`${item}-${index}`" class="question-tag">{{ item }}<button type="button" aria-label="删除提问示例" @click="form.quick_questions.splice(index, 1)">×</button></span><input v-model="question" placeholder="请输入问题示例，按回车添加" @keydown.enter="onQuestionEnter"></span></label>
         <label class="form-row stream-row"><span>非流输出</span><span class="advanced-control"><span class="panel-toggle"><span class="switch"><input v-model="form.un_stream" type="checkbox" role="switch" aria-label="非流输出"><i></i></span><small>启用后一次性显示完整回复，等待时间较长。</small></span><small>模型不支持流式输出时，可开启此功能。</small></span></label>
       </section>
 
+      <p v-if="formError" class="dialog-error" role="alert">{{ formError }}</p>
       <footer><button type="button" @click="dialog.close()">取消</button><button class="primary" type="submit">保存</button></footer>
     </form>
   </dialog>
@@ -141,7 +156,7 @@ defineExpose({ open });
 .dialog-tabs button:focus-visible { outline-offset: -2px; }
 .dialog-tabs button.active { color: var(--color-primary); font-weight: 500; }
 .dialog-tabs button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--color-primary); }
-.dialog-pane { width: 100%; min-height: 0; padding: 16px 24px 0; overflow-y: auto; overscroll-behavior: contain; }
+.dialog-pane { width: 100%; min-height: 0; padding: 16px 24px 12px; overflow-y: auto; overscroll-behavior: contain; }
 .form-row { min-height: 32px; margin-bottom: 20px; display: flex; align-items: flex-start; }
 .form-row > span:first-child { width: 90px; flex: 0 0 90px; padding-top: 5px; }
 .form-row.required > span:first-child::after { content: " *"; color: #f53f3f; }
@@ -188,9 +203,12 @@ defineExpose({ open });
 .advanced-control > small { display: block; color: var(--color-text-3); font-size: 12px; line-height: 19px; }
 .panel-toggle > small { color: var(--color-text-3); font-size: 12px; }
 .stream-row { margin-bottom: 0 !important; }
-.agent-dialog footer { padding: 16px 24px; display: flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 12px; border-top: 1px solid var(--color-border-2); }
-.agent-dialog footer button { height: 32px; padding: 0 15px; border: 1px solid transparent; border-radius: 12px; background: var(--color-fill-2); }
+.dialog-error { margin: 0 24px 10px; padding: 6px 10px; border-radius: 8px; color: #d94b40; background: rgba(217, 75, 64, 0.10); font-size: 12px; line-height: 1.5; }
+.agent-dialog footer { padding: 14px 24px; display: flex; flex: 0 0 auto; align-items: center; justify-content: center; gap: 12px; border-top: 1px solid var(--color-border-2); }
+.agent-dialog footer button { height: 32px; padding: 0 15px; border: 1px solid transparent; border-radius: 12px; background: var(--color-fill-2); transition: background .14s ease, filter .14s ease; }
+.agent-dialog footer button:hover { background: var(--color-fill-3); }
 .agent-dialog footer .primary { color: #fff; background: var(--color-primary); }
+.agent-dialog footer .primary:hover { background: var(--color-primary); filter: brightness(1.06); }
 @media (max-width: 480px) {
   .dialog-tabs { margin: 0 16px; gap: 24px; }
   .dialog-pane { padding-right: 16px; padding-left: 16px; }

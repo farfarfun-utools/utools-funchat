@@ -11,8 +11,10 @@ const store = useChatStore();
 const root = ref<HTMLElement>();
 const open = ref(false);
 const closing = ref(false);
+const copied = ref(false);
 let closeTimer: ReturnType<typeof setTimeout> | undefined;
 let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+let copiedTimer: ReturnType<typeof setTimeout> | undefined;
 let printCleanup: (() => void) | undefined;
 
 function escapeHtml(value: unknown): string {
@@ -133,7 +135,12 @@ function printPdf() {
 
 async function select(value: string) {
   closeMenu();
-  if (value === 'copy') await host.copyText(markdown.value.replace(/\*\*(.*?)：\*\*/gu, '$1：'));
+  if (value === 'copy') {
+    await host.copyText(markdown.value.replace(/\*\*(.*?)：\*\*/gu, '$1：'));
+    copied.value = true;
+    clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => { copied.value = false; }, 1600);
+  }
   // 消息区还没挂载时 querySelector 会是 null，直接跳过而不是把 null 丢给 html2canvas
   const messages = value === 'image' ? document.querySelector<HTMLElement>('.messages-content') : null;
   if (messages) await withAllExpanded(() => saveElementImage(messages, sanitizeFilename(store.state.currentAgent?.nickname, 'chat')));
@@ -151,14 +158,16 @@ useDismissable(root, () => open.value, closeMenu);
 onBeforeUnmount(() => {
   clearTimeout(hoverTimer);
   clearTimeout(closeTimer);
+  clearTimeout(copiedTimer);
   printCleanup?.();
 });
 </script>
 
 <template>
   <div ref="root" class="export-anchor" @pointerenter="openMenu" @pointerleave="scheduleClose">
-    <button class="chat-more" type="button" title="导出对话" aria-label="导出对话" :aria-expanded="open" @click="toggleMenu">
-      <svg width="20" height="20" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+    <button class="chat-more" :class="{ 'is-copied': copied }" type="button" :title="copied ? '已复制对话' : '导出对话'" :aria-label="copied ? '已复制对话' : '导出对话'" :aria-expanded="open" @click="toggleMenu">
+      <i v-if="copied" class="iconfont icon-success export-copied-icon" aria-hidden="true"></i>
+      <svg v-else width="20" height="20" viewBox="0 0 48 48" fill="none" aria-hidden="true">
         <circle cx="24" cy="12" r="3" fill="var(--color-text-3)"></circle>
         <circle cx="24" cy="24" r="3" fill="var(--color-text-3)"></circle>
         <circle cx="24" cy="35" r="3" fill="var(--color-text-3)"></circle>
@@ -206,8 +215,9 @@ onBeforeUnmount(() => {
 <style scoped>
 .export-anchor { position: relative; z-index: 10; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; }
 .export-anchor:hover { background: var(--color-fill-1); }
-.chat-more { width: 20px; height: 20px; color: var(--color-text-3); }
-.chat-more:hover { color: var(--color-primary); }
+.chat-more { width: 20px; height: 20px; display: grid; place-items: center; color: var(--color-text-3); }
+.chat-more:hover, .chat-more.is-copied { color: var(--color-primary); }
+.export-copied-icon { font-size: 16px; line-height: 1; }
 .export-dropdown { position: absolute; top: 30px; right: 0; width: 163px; max-height: 260px; padding: 6px; overflow: hidden; border: 1px solid var(--color-border-2); border-radius: 4px; background: var(--color-bg-2); box-shadow: 0 4px 10px #0000001a; }
 .export-dropdown button { width: 100%; height: 36px; padding: 0 12px; display: flex; align-items: center; gap: 8px; color: var(--color-text-2); text-align: left; white-space: nowrap; }
 .export-dropdown button:hover, .export-dropdown button:focus-visible { color: var(--color-text-1); background: var(--color-fill-2); }
