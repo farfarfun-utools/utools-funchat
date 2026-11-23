@@ -48,5 +48,17 @@
     "pnpm": ">=12"
   },
   "description": "言来语往 FunChat：多角色 AI 对话、图片生成、话题回溯与一键导出；会话和配置保存在 uTools 数据库",
+  "keywords": [
+    "utools",
+    "utools-plugin",
+    "funchat",
+    "ai",
+    "llm",
+    "chat",
+    "image-generation",
+    "vue3",
+    "typescript",
+    "farfarfun"
+  ],
   "homepage": "https://farfarfun.github.io/packages/utools-funchat/"
 }
