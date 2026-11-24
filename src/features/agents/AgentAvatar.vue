@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, type PropType } from 'vue';
+import { computed, ref, watch, type PropType } from 'vue';
 import type { AgentAvatar } from '../../types.ts';
+import { resolveAvatarImageUrl } from './avatar-presets.ts';
 
 // 头像既要画好友文档，也要画市场里还没落盘的角色，所以只认 nickname + avatar 两个字段。
 type AvatarOwner = { nickname?: string; avatar?: AgentAvatar };
@@ -12,9 +13,7 @@ const props = defineProps({
 
 const avatar = computed<AgentAvatar>(() => props.agent?.avatar || {});
 
-const imageUrl = computed(() => avatar.value.type === 'image' && avatar.value.image
-  ? `./avatars/${avatar.value.image}.jpg`
-  : '');
+const imageUrl = computed(() => (avatar.value.type === 'image' ? resolveAvatarImageUrl(avatar.value.image) : ''));
 const isEmoji = computed(() => avatar.value.type === 'emoji' && Boolean(avatar.value.emoji));
 // types.ts 一直声明了 text 型头像，种子数据里也有，但以前没有对应分支，这些好友会静默退化成
 // 通用的 icon-a1。最多取两个字——「医生」这类两字昵称在 36px 的圆里也还排得下。
@@ -35,6 +34,9 @@ const background = computed(() => {
 });
 
 const failed = ref(false);
+watch(imageUrl, () => {
+  failed.value = false;
+});
 </script>
 
 <template>

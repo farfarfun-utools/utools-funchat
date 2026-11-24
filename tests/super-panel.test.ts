@@ -54,6 +54,44 @@ test('registers only opted-in roles and updates, disables and deletes their entr
   assert.equal(host.db.get(store.state.currentAgent._id).superPanel, true);
 });
 
+test('super panel features use each role avatar and refresh when the avatar changes', () => {
+  const agent = store.state.agents.find((item) => item._id === 'ai@translator');
+  const uploaded = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+  // 默认无 avatar 时生成基于昵称首字的渐变 SVG 图标，而非插件通用 logo.png
+  const initialIcon = host.getFeatures()[0].icon;
+  assert.ok(initialIcon?.startsWith('data:image/svg+xml;base64,'), '无自定义头像时应生成角色专属 SVG 图标');
+  assert.match(Buffer.from(initialIcon.split(',')[1], 'base64').toString('utf8'), /中英/);
+
+  // 更换为内置头像
+  store.updateAgent(agent, { ...agentFormValues(agent), avatar: { type: 'image', image: '18' } });
+  assert.equal(host.getFeatures()[0].icon, 'dist/avatars/18.jpg');
+
+  // 更换为 Emoji 渐变头像
+  store.updateAgent(agent, {
+    ...agentFormValues(agent),
+    avatar: { type: 'emoji', emoji: '🦊', gradient: ['#fb923c', '#ea580c'], color: '#fb923c' },
+  });
+  const emojiIcon = host.getFeatures()[0].icon;
+  assert.ok(emojiIcon?.startsWith('data:image/svg+xml;base64,'));
+  const decodedEmojiSvg = Buffer.from(emojiIcon.split(',')[1], 'base64').toString('utf8');
+  assert.match(decodedEmojiSvg, /🦊/);
+  assert.match(decodedEmojiSvg, /#fb923c/);
+
+  // 更换为本地上传的 Base64 头像
+  store.updateAgent(agent, { ...agentFormValues(agent), avatar: { type: 'image', image: uploaded } });
+  assert.equal(host.getFeatures()[0].icon, uploaded);
+
+  // 更换为文字头像
+  store.updateAgent(agent, {
+    ...agentFormValues(agent),
+    avatar: { type: 'text', text: '翻译', gradient: ['#38bdf8', '#2563eb'], color: '#38bdf8' },
+  });
+  const textIcon = host.getFeatures()[0].icon;
+  assert.ok(textIcon?.startsWith('data:image/svg+xml;base64,'));
+  assert.match(Buffer.from(textIcon.split(',')[1], 'base64').toString('utf8'), /翻译/);
+});
+
 test('reload and device sync reconcile restored roles without deleting unrelated features', async () => {
   host.setFeature({ code: 'unrelated', cmds: ['其他功能'] });
   host.setFeature({ code: 'funchat-agent-ai@deleted', cmds: ['旧角色'] });

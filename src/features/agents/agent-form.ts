@@ -65,6 +65,7 @@ export function agentFormValues(agent: Agent | null | undefined): AgentFormValue
   return Object.assign(values, {
     model: agent.params?.model || '',
     type: agent.isFunAi || agent.params?.functions ? 'function' : 'prompt',
+    ...('avatar' in agent && agent.avatar ? { avatar: JSON.parse(JSON.stringify(agent.avatar)) } : {}),
     nickname: agent.nickname || '',
     info: agent.info || '',
     content: agent.content || '',

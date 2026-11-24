@@ -5,11 +5,13 @@ import { agentFormValues } from './agent-form.js';
 import type { Agent, AgentFormValues } from '../../types.ts';
 import type { ParamKey } from './agent-params.ts';
 import AgentAvatar from './AgentAvatar.vue';
+import AvatarPickerDialog from './AvatarPickerDialog.vue';
 import ParameterSliders from './ParameterSliders.vue';
 import ModelPickerDialog from '../chat/ModelPickerDialog.vue';
 
 const store = useChatStore();
 const dialog = ref();
+const avatarPicker = ref<InstanceType<typeof AvatarPickerDialog> | null>(null);
 const editing = ref<Agent | null>(null);
 const tab = ref('basic');
 const question = ref('');
@@ -20,10 +22,15 @@ const form = reactive<AgentFormValues>(agentFormValues(null));
 
 const previewAgent = computed(() => ({
   nickname: form.nickname || 'AI',
-  avatar: editing.value?.avatar || { type: 'icon', icon: 'icon-a1', color: '#0ca47f' },
+  avatar: form.avatar || editing.value?.avatar || { type: 'icon', icon: 'icon-a1', color: '#0ca47f' },
 }));
 const modelOptions = computed(() => store.routeModels.value);
 const picker = ref();
+
+async function chooseAvatar() {
+  const picked = await avatarPicker.value?.open(previewAgent.value.avatar, form.nickname || 'AI');
+  if (picked) form.avatar = picked;
+}
 
 async function chooseModel() {
   const picked = await picker.value?.open(modelOptions.value, form.model ? [form.model] : [], {
@@ -36,6 +43,7 @@ const viaUtools = computed(() => store.state.settings.provider === 'utools');
 
 function open(agent: Agent | null = null) {
   editing.value = agent;
+  delete form.avatar;
   Object.assign(form, agentFormValues(agent));
   question.value = '';
   formError.value = '';
@@ -89,8 +97,18 @@ defineExpose({ open });
 <template>
   <dialog ref="dialog" class="agent-dialog" :class="{ 'function-dialog': tab === 'basic' && form.type === 'function' }" tabindex="-1">
     <form method="dialog" @submit.prevent="submit">
-      <div class="avatar-editor">
-        <AgentAvatar :agent="previewAgent" :size="78" />
+      <div class="avatar-header">
+        <button
+          type="button"
+          class="avatar-editor"
+          title="点击更换头像"
+          aria-label="更换角色头像"
+          @click="chooseAvatar"
+        >
+          <AgentAvatar :agent="previewAgent" :size="78" />
+          <span class="avatar-edit-badge" aria-hidden="true">✎</span>
+        </button>
+        <button type="button" class="avatar-hint-btn" @click="chooseAvatar">点击更换头像（支持预设 / 上传图片）</button>
       </div>
 
       <nav class="dialog-tabs" aria-label="好友设置分类">
@@ -142,6 +160,7 @@ defineExpose({ open });
   </dialog>
 
   <ModelPickerDialog ref="picker" />
+  <AvatarPickerDialog ref="avatarPicker" />
 </template>
 
 <style scoped>
@@ -150,7 +169,12 @@ defineExpose({ open });
 .agent-dialog:focus { outline: 0; }
 .agent-dialog form { max-height: calc(100dvh - 24px); display: flex; flex-direction: column; }
 /* 头像和操作区留在滚动区外，避免短窗口把头像上沿和保存按钮裁掉。 */
-.avatar-editor { width: 78px; height: 78px; margin: 20px auto 8px; flex: 0 0 auto; }
+.avatar-header { margin: 16px auto 4px; display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 0 0 auto; }
+.avatar-editor { position: relative; width: 78px; height: 78px; border-radius: 50%; transition: transform .14s ease, box-shadow .14s ease; }
+.avatar-editor:hover { transform: scale(1.03); box-shadow: 0 0 0 3px var(--color-primary-light-1); }
+.avatar-edit-badge { position: absolute; right: 0; bottom: 0; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--color-bg-3); background: var(--color-primary); color: #fff; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0, 0, 0, .2); }
+.avatar-hint-btn { font-size: 12px; color: var(--color-text-3); transition: color .14s ease; }
+.avatar-hint-btn:hover { color: var(--color-primary); }
 .dialog-tabs { min-height: 44px; margin: 0 24px; display: flex; flex: 0 0 auto; align-items: flex-end; gap: 32px; border-bottom: 1px solid var(--color-border-2); }
 .dialog-tabs button { position: relative; height: 40px; padding: 8px 0; color: var(--color-text-1); line-height: 22px; }
 .dialog-tabs button:focus-visible { outline-offset: -2px; }

@@ -21,6 +21,7 @@ import {
 import { buildUserContent, hasContent, withPrefix } from '../features/chat/message-content.ts';
 import { estimateConversationTokens, messageText } from '../features/chat/token-count.ts';
 import { writeOptionalParams } from '../features/agents/agent-form.ts';
+import { buildAgentFeatureIcon, isIconFontReady } from '../features/agents/avatar-presets.ts';
 import type { ParamOverrides } from '../features/agents/agent-params.ts';
 import type {
   Agent,
@@ -199,6 +200,15 @@ function applyPluginHeight(): void {
 // 通用入口只预填；角色专属入口在发送前清掉预填，避免输入框再次出现已发送的文字。
 const enterIntent = ref({ seq: 0, text: '' });
 const AGENT_FEATURE_PREFIX = 'funchat-agent-';
+let iconFontRefreshScheduled = false;
+
+function scheduleIconFontFeatureRefresh(): void {
+  if (iconFontRefreshScheduled || typeof document === 'undefined' || !document.fonts?.ready) return;
+  iconFontRefreshScheduled = true;
+  void document.fonts.ready.then(() => {
+    if (isIconFontReady()) syncAgentFeatures();
+  }).catch(() => {});
+}
 
 function syncAgentFeatures(): void {
   try {
@@ -207,14 +217,19 @@ function syncAgentFeatures(): void {
     for (const feature of host.getFeatures()) {
       if (feature.code.startsWith(AGENT_FEATURE_PREFIX) && !codes.has(feature.code)) host.removeFeature(feature.code);
     }
+    let needsFontRefresh = false;
     for (const agent of enabled) {
+      if ((agent.avatar?.type === 'icon' || (!agent.avatar?.type && agent.avatar?.icon)) && !isIconFontReady()) {
+        needsFontRefresh = true;
+      }
       host.setFeature({
         code: `${AGENT_FEATURE_PREFIX}${agent._id}`,
         description: `用${agent.nickname}处理选中文字`,
-        icon: 'logo.png',
+        icon: buildAgentFeatureIcon(agent),
         cmds: [{ type: 'over', label: agent.nickname, minLength: 1, maxLength: 100_000 }],
       });
     }
+    if (needsFontRefresh) scheduleIconFontFeatureRefresh();
   } catch (error) {
     state.error = `超级面板入口更新失败：${error instanceof Error ? error.message : String(error)}`;
   }
@@ -432,6 +447,9 @@ function updateAgent(agent: Agent, values: AgentFormValues): void {
     contextLength: Number(values.contextLength) || 16,
     params,
   });
+  if (values.avatar) {
+    agent.avatar = clonePlain(values.avatar);
+  }
 
   // 键集被钉死成和 OPTIONAL_AGENT_FIELDS 一致：两边漏掉同一个字段才是无害的，
   // 只漏这一边会往文档里写 undefined，只漏那一边则是改了也存不下去。
