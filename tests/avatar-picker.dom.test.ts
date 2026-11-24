@@ -1,14 +1,18 @@
 // @vitest-environment jsdom
 import { test } from 'vitest';
 import { strict as assert } from 'node:assert';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { mount } from '@vue/test-utils';
 import AgentAvatar from '../src/features/agents/AgentAvatar.vue';
 import AvatarPickerDialog from '../src/features/agents/AvatarPickerDialog.vue';
 import {
   AVATAR_BUILTIN_IMAGES,
+  AVATAR_BUILTIN_IMAGE_GROUPS,
   AVATAR_EMOJI_GROUPS,
   AVATAR_GRADIENTS,
   AVATAR_ICONS,
+  buildAgentFeatureIcon,
   compressAvatarFile,
   isSafeAvatarDataUrl,
   randomPresetAvatar,
@@ -38,10 +42,24 @@ test('isSafeAvatarDataUrl 仅接受合法位图 base64 DataURL 并拒绝 SVG / �
 
 test('resolveAvatarImageUrl 区分内置头像编号、安全 DataURL 与非法路径', () => {
   assert.equal(resolveAvatarImageUrl('14'), './avatars/14.jpg');
+  assert.equal(resolveAvatarImageUrl('pro-01'), './avatars/pro-01.jpg');
   assert.equal(resolveAvatarImageUrl(TINY_PNG_DATA_URL), TINY_PNG_DATA_URL);
   assert.equal(resolveAvatarImageUrl('../secret'), '');
   assert.equal(resolveAvatarImageUrl('http://evil.example/x.jpg'), '');
   assert.equal(resolveAvatarImageUrl(''), '');
+});
+
+test('所有内置头像清单均与 public/avatars 资源一一对应且可用于超级面板', () => {
+  const avatarsDir = join(process.cwd(), 'public', 'avatars');
+  assert.equal(AVATAR_BUILTIN_IMAGE_GROUPS.length, 4);
+  assert.equal(AVATAR_BUILTIN_IMAGES.length, 59);
+  assert.equal(new Set(AVATAR_BUILTIN_IMAGES).size, AVATAR_BUILTIN_IMAGES.length, '内置头像 ID 不应重复');
+  for (const id of AVATAR_BUILTIN_IMAGES) {
+    const file = join(avatarsDir, `${id}.jpg`);
+    assert.equal(existsSync(file), true, `缺少内置头像文件 ${file}`);
+    assert.equal(resolveAvatarImageUrl(id), `./avatars/${id}.jpg`);
+    assert.equal(buildAgentFeatureIcon({ nickname: '测试', avatar: { type: 'image', image: id } }), `dist/avatars/${id}.jpg`);
+  }
 });
 
 test('randomPresetAvatar 返回预设池内的有效 Emoji 渐变头像', () => {

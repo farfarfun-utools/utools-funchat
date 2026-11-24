@@ -4,6 +4,7 @@ import type { AgentAvatar } from '../../types.ts';
 import AgentAvatarView from './AgentAvatar.vue';
 import {
   AVATAR_BUILTIN_IMAGES,
+  AVATAR_BUILTIN_IMAGE_GROUPS,
   AVATAR_EMOJI_GROUPS,
   AVATAR_GRADIENTS,
   AVATAR_ICONS,
@@ -18,6 +19,7 @@ const dialog = ref<HTMLDialogElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const tab = ref<PickerTab>('emoji');
 const emojiGroup = ref(AVATAR_EMOJI_GROUPS[0].id);
+const imageGroup = ref('all');
 const customEmoji = ref('');
 const textValue = ref('');
 const uploadError = ref('');
@@ -49,6 +51,11 @@ let resolver: ((avatar: AgentAvatar | null) => void) | null = null;
 const activeEmojiItems = computed(
   () => AVATAR_EMOJI_GROUPS.find((g) => g.id === emojiGroup.value)?.items || AVATAR_EMOJI_GROUPS[0].items,
 );
+
+const activeBuiltinImages = computed(() => {
+  if (imageGroup.value === 'all') return AVATAR_BUILTIN_IMAGES;
+  return AVATAR_BUILTIN_IMAGE_GROUPS.find((g) => g.id === imageGroup.value)?.items || AVATAR_BUILTIN_IMAGES;
+});
 
 const previewAvatar = computed<AgentAvatar>(() => {
   if (draft.type === 'image') {
@@ -207,6 +214,13 @@ function onTextInput() {
 }
 
 function pickRandom() {
+  if (tab.value === 'image') {
+    const pool = activeBuiltinImages.value;
+    const picked = pool[Math.floor(Math.random() * pool.length)] || AVATAR_BUILTIN_IMAGES[0];
+    draft.type = 'image';
+    draft.image = picked;
+    return;
+  }
   const next = randomPresetAvatar();
   draft.type = 'emoji';
   draft.emoji = next.emoji || '🤖';
@@ -345,16 +359,36 @@ defineExpose({ open });
 
         <!-- 2. Built-in Portrait Images -->
         <section v-else-if="tab === 'image'" class="tab-panel">
+          <div class="group-pills">
+            <button
+              type="button"
+              class="pill-btn"
+              :class="{ active: imageGroup === 'all' }"
+              @click="imageGroup = 'all'"
+            >
+              全部 ({{ AVATAR_BUILTIN_IMAGES.length }})
+            </button>
+            <button
+              v-for="g in AVATAR_BUILTIN_IMAGE_GROUPS"
+              :key="g.id"
+              type="button"
+              class="pill-btn"
+              :class="{ active: imageGroup === g.id }"
+              @click="imageGroup = g.id"
+            >
+              {{ g.label }}
+            </button>
+          </div>
           <div class="image-grid">
             <button
-              v-for="id in AVATAR_BUILTIN_IMAGES"
+              v-for="id in activeBuiltinImages"
               :key="id"
               type="button"
               class="image-cell"
               :class="{ active: draft.type === 'image' && draft.image === id }"
               @click="pickBuiltinImage(id)"
             >
-              <img :src="`./avatars/${id}.jpg`" :alt="`内置头像 ${id}`" />
+              <img :src="`./avatars/${id}.jpg`" :alt="`内置头像 ${id}`" loading="lazy" />
             </button>
           </div>
         </section>
@@ -624,8 +658,11 @@ defineExpose({ open });
 }
 .image-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 8px;
+  max-height: 232px;
+  overflow-y: auto;
+  padding: 2px;
 }
 .image-cell {
   padding: 4px;

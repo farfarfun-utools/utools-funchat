@@ -51,9 +51,51 @@ export const AVATAR_EMOJI_GROUPS: readonly EmojiGroup[] = [
   },
 ];
 
-export const AVATAR_BUILTIN_IMAGES: readonly string[] = [
-  '6', '7', '14', '15', '16', '18', '24', '37', '38', '39', '42',
+export interface BuiltinImageGroup {
+  id: string;
+  label: string;
+  items: readonly string[];
+}
+
+export const AVATAR_BUILTIN_IMAGE_GROUPS: readonly BuiltinImageGroup[] = [
+  {
+    id: 'pro',
+    label: '人物职场',
+    items: [
+      'pro-01', 'pro-02', 'pro-03', 'pro-04',
+      'pro-05', 'pro-06', 'pro-07', 'pro-08',
+      'pro-09', 'pro-10', 'pro-11', 'pro-12',
+      'pro-13', 'pro-14', 'pro-15', 'pro-16',
+    ],
+  },
+  {
+    id: 'pet',
+    label: '萌宠伙伴',
+    items: [
+      'pet-01', 'pet-02', 'pet-03', 'pet-04',
+      'pet-05', 'pet-06', 'pet-07', 'pet-08',
+      'pet-09', 'pet-10', 'pet-11', 'pet-12',
+      'pet-13', 'pet-14', 'pet-15', 'pet-16',
+    ],
+  },
+  {
+    id: 'sci',
+    label: '科幻奇幻',
+    items: [
+      'sci-01', 'sci-02', 'sci-03', 'sci-04',
+      'sci-05', 'sci-06', 'sci-07', 'sci-08',
+      'sci-09', 'sci-10', 'sci-11', 'sci-12',
+      'sci-13', 'sci-14', 'sci-15', 'sci-16',
+    ],
+  },
+  {
+    id: 'classic',
+    label: '经典角色',
+    items: ['6', '7', '14', '15', '16', '18', '24', '37', '38', '39', '42'],
+  },
 ];
+
+export const AVATAR_BUILTIN_IMAGES: readonly string[] = AVATAR_BUILTIN_IMAGE_GROUPS.flatMap((g) => g.items);
 
 export const AVATAR_ICONS: readonly string[] = [
   'icon-a1', 'icon-a2', 'icon-a3', 'icon-a4', 'icon-a5', 'icon-a6', 'icon-a7', 'icon-a8',
